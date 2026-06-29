@@ -26,6 +26,9 @@
     font-size: 15px;
     line-height: 1.7;
     padding: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
   }
   header {
     background: var(--surface);
@@ -153,9 +156,8 @@
   }
   #md tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
   #html-frame {
-    background: #fff;
-    border-radius: 8px;
-    min-height: 80vh;
+    flex: 1;
+    height: calc(100vh - 110px);
   }
 </style>
 </head>
@@ -182,26 +184,20 @@
 <div id="content">
   <div id="loading">Đang tải báo cáo…</div>
   <div id="md" style="display:none"></div>
-  <iframe id="html-frame" style="display:none;width:100%;border:none;border-radius:8px" scrolling="yes"></iframe>
 </div>
+<iframe id="html-frame" style="display:none;width:100%;border:none;flex:1" scrolling="yes"></iframe>
 
 <script>
 const chips = document.querySelectorAll('.nav-chip');
+const contentEl = document.getElementById('content');
 const mdEl = document.getElementById('md');
 const loadingEl = document.getElementById('loading');
 const htmlFrame = document.getElementById('html-frame');
 
-function setFrameHeight() {
-  try {
-    const h = htmlFrame.contentDocument.body.scrollHeight;
-    htmlFrame.style.height = (h + 32) + 'px';
-  } catch(e) {
-    htmlFrame.style.height = '90vh';
-  }
-}
-
 async function loadReport(file) {
   htmlFrame.style.display = 'none';
+  htmlFrame.src = '';
+  contentEl.style.display = 'block';
   mdEl.style.display = 'none';
   loadingEl.style.display = 'block';
   loadingEl.textContent = 'Đang tải báo cáo…';
@@ -219,17 +215,10 @@ async function loadReport(file) {
 }
 
 function loadHtml(file) {
-  mdEl.style.display = 'none';
-  loadingEl.style.display = 'block';
-  loadingEl.textContent = 'Đang tải báo cáo…';
-  htmlFrame.style.height = '90vh';
+  contentEl.style.display = 'none';
   htmlFrame.src = file;
-  htmlFrame.onload = () => {
-    loadingEl.style.display = 'none';
-    htmlFrame.style.display = 'block';
-    setFrameHeight();
-    window.scrollTo(0, 0);
-  };
+  htmlFrame.style.display = 'block';
+  window.scrollTo(0, 0);
 }
 
 chips.forEach(chip => {
