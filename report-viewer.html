@@ -152,8 +152,11 @@
     padding: 8px 12px;
   }
   #md tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
-  /* Highlight ✅ ❌ */
-  #md td:first-child, #md td { }
+  #html-frame {
+    background: #fff;
+    border-radius: 8px;
+    min-height: 80vh;
+  }
 </style>
 </head>
 <body>
@@ -171,22 +174,34 @@
   <a class="nav-chip" data-file="WF1_DieuTra_Spike_iqair_08-12-20h.md">
     WF1 · com.droidteam.weather
   </a>
-  <a class="nav-chip" href="PhanTich_DoiChieu_Audit_airapi_AQI_4.html" style="margin-left:8px;border-style:dashed">
-    Phân tích đối chiếu Audit AQI ↗
+  <a class="nav-chip" data-html="PhanTich_DoiChieu_Audit_airapi_AQI_4.html" style="margin-left:8px">
+    Phân tích đối chiếu Audit AQI
   </a>
 </div>
 
 <div id="content">
   <div id="loading">Đang tải báo cáo…</div>
   <div id="md" style="display:none"></div>
+  <iframe id="html-frame" style="display:none;width:100%;border:none;border-radius:8px" scrolling="yes"></iframe>
 </div>
 
 <script>
 const chips = document.querySelectorAll('.nav-chip');
 const mdEl = document.getElementById('md');
 const loadingEl = document.getElementById('loading');
+const htmlFrame = document.getElementById('html-frame');
+
+function setFrameHeight() {
+  try {
+    const h = htmlFrame.contentDocument.body.scrollHeight;
+    htmlFrame.style.height = (h + 32) + 'px';
+  } catch(e) {
+    htmlFrame.style.height = '90vh';
+  }
+}
 
 async function loadReport(file) {
+  htmlFrame.style.display = 'none';
   mdEl.style.display = 'none';
   loadingEl.style.display = 'block';
   loadingEl.textContent = 'Đang tải báo cáo…';
@@ -203,21 +218,51 @@ async function loadReport(file) {
   }
 }
 
+function loadHtml(file) {
+  mdEl.style.display = 'none';
+  loadingEl.style.display = 'block';
+  loadingEl.textContent = 'Đang tải báo cáo…';
+  htmlFrame.style.height = '90vh';
+  htmlFrame.src = file;
+  htmlFrame.onload = () => {
+    loadingEl.style.display = 'none';
+    htmlFrame.style.display = 'block';
+    setFrameHeight();
+    window.scrollTo(0, 0);
+  };
+}
+
 chips.forEach(chip => {
   chip.addEventListener('click', () => {
     chips.forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
-    loadReport(chip.dataset.file);
+    if (chip.dataset.html) {
+      loadHtml(chip.dataset.html);
+    } else {
+      loadReport(chip.dataset.file);
+    }
   });
 });
 
-// Load file từ query param hoặc file đầu tiên
+// Load từ query param hoặc chip đầu tiên
 const params = new URLSearchParams(location.search);
-const initFile = params.get('file') || chips[0].dataset.file;
-const initChip = [...chips].find(c => c.dataset.file === initFile) || chips[0];
+const initFile = params.get('file');
+const initHtml = params.get('html');
+let initChip;
+if (initHtml) {
+  initChip = [...chips].find(c => c.dataset.html === initHtml) || chips[0];
+} else if (initFile) {
+  initChip = [...chips].find(c => c.dataset.file === initFile) || chips[0];
+} else {
+  initChip = chips[0];
+}
+chips.forEach(c => c.classList.remove('active'));
 initChip.classList.add('active');
-chips.forEach(c => { if (c !== initChip) c.classList.remove('active'); });
-loadReport(initFile);
+if (initChip.dataset.html) {
+  loadHtml(initChip.dataset.html);
+} else {
+  loadReport(initChip.dataset.file || chips[0].dataset.file);
+}
 </script>
 </body>
 </html>
