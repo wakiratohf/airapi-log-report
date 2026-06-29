@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phân tích đối chiếu 2 app (audit mã nguồn) — tải airapi tại mốc giờ chẵn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1F4F8; --surface:#FFFFFF;
+    --ink-deep:#0E1722; --ink:#15212E; --ink-soft:#4C5C6B; --ink-faint:#8493A1;
+    --line:#DCE3EB; --line-soft:#E8EDF2;
+    --wf3:#B4530A; --wf3-ink:#7C3A07; --wf3-bg:#FBEDDC; --wf3-line:#EBC795;
+    --wf1:#0C7489; --wf1-ink:#0A5566; --wf1-bg:#E1F1F4; --wf1-line:#A6D3DD;
+    --ok:#15803D; --ok-ink:#0F5C2C; --ok-bg:#DCF2E4; --ok-line:#A8DDBC;
+    --open:#BE123C; --open-bg:#FBE7EC; --open-line:#F0BCC8;
+    --shared:#1F6FB2; --shared-bg:#E2EDF7; --shared-line:#AFCFEA;
+    --grid:rgba(255,255,255,.06);
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;
+    --display:'Be Vietnam Pro','Inter',system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  code,kbd,pre{font-family:var(--mono)}
+  ::selection{background:#BBE6C9;color:#0C3D1F}
+
+  .wrap{max-width:100%;margin:0 auto;padding:0 clamp(20px,3.5vw,60px)}
+  .read{max-width:100%}
+  section{padding:60px 0;scroll-margin-top:68px}
+  section + section{border-top:1px solid var(--line-soft)}
+
+  /* nav */
+  .topbar{position:sticky;top:0;z-index:40;background:rgba(241,244,248,.86);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid var(--line)}
+  .topbar .wrap{display:flex;align-items:center;gap:18px;height:54px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:-.01em;white-space:nowrap}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(21,128,61,.18)}
+  .navlinks{display:flex;gap:4px;margin-left:auto;overflow-x:auto;scrollbar-width:none}
+  .navlinks::-webkit-scrollbar{display:none}
+  .navlinks a{font-size:13px;font-weight:500;color:var(--ink-soft);text-decoration:none;padding:7px 11px;border-radius:8px;white-space:nowrap;transition:background .15s,color .15s}
+  .navlinks a:hover{background:#E3E9F0;color:var(--ink)}
+  .navlinks a.active{color:var(--ok-ink);background:var(--ok-bg)}
+
+  /* hero */
+  .hero{background:radial-gradient(120% 140% at 85% -10%,#163328 0%,transparent 55%),linear-gradient(180deg,#0E1B17 0%,#0C1512 100%);color:#E6F0EA;position:relative;overflow:hidden;border-bottom:1px solid #08110D}
+  .hero::before{content:"";position:absolute;inset:0;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:34px 34px;mask-image:linear-gradient(180deg,transparent,#000 30%,#000 75%,transparent)}
+  .hero .wrap{position:relative;padding-top:50px;padding-bottom:50px}
+  .hero-grid{display:grid;grid-template-columns:1.06fr .94fr;gap:46px;align-items:center}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#86D4A6;display:inline-flex;align-items:center;gap:9px;margin-bottom:18px}
+  .eyebrow::before{content:"";width:26px;height:2px;background:linear-gradient(90deg,#15803D,#86D4A6)}
+  .hero h1{font-family:var(--display);font-weight:800;letter-spacing:-.025em;line-height:1.06;font-size:clamp(28px,4.2vw,46px);margin:0 0 16px;color:#FAFEFB}
+  .hero h1 .host{color:#F5A35A}
+  .lead{font-size:16.5px;line-height:1.6;color:#B6C8BE;margin:0 0 24px;max-width:56ch}
+  .lead b{color:#E6F0EA;font-weight:600}
+  .chips{display:flex;flex-wrap:wrap;gap:9px}
+  .chip{font-family:var(--mono);font-size:11.5px;color:#AEC4B6;padding:6px 11px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(255,255,255,.03)}
+  .chip b{color:#EDF5EF;font-weight:500}
+
+  /* hero agreement board */
+  .panel{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:18px 20px 16px;box-shadow:0 24px 60px -30px rgba(0,0,0,.7)}
+  .panel-title{font-family:var(--display);font-weight:600;font-size:13px;color:#E6F0EA;margin-bottom:4px}
+  .panel-sub{font-family:var(--mono);font-size:10.5px;color:#7E948A;margin-bottom:14px}
+  .board{width:100%;border-collapse:collapse;font-size:12.5px}
+  .board th{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;padding:7px 4px;text-align:center;color:#A9BFB1;border-bottom:1px solid rgba(255,255,255,.14)}
+  .board th.q{text-align:left;width:62%}
+  .board th.w3{color:#F0B574} .board th.w1{color:#7FCEDD}
+  .board td{padding:9px 4px;border-bottom:1px solid rgba(255,255,255,.07);color:#C6D4CB;font-size:12px}
+  .board td.c{text-align:center;font-family:var(--mono);font-weight:700;font-size:13px}
+  .board td.yes{color:#5FD68C} .board td.no{color:#8FA3AE}
+  .board tr:last-child td{border-bottom:none}
+  .board-cap{font-family:var(--sans);font-size:12px;color:#9CB0A4;margin-top:13px;line-height:1.5}
+  .board-cap b{color:#E6F0EA;font-weight:600}
+
+  /* headings */
+  .sec-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:12px;display:flex;align-items:center;gap:9px}
+  .sec-eyebrow .num{color:var(--ok);font-weight:700}
+  h2.sec-title{font-family:var(--display);font-weight:700;letter-spacing:-.02em;font-size:clamp(23px,3vw,31px);line-height:1.13;margin:0 0 14px}
+  .sec-intro{font-size:16.5px;color:var(--ink-soft);margin:0 0 30px;max-width:76ch}
+  .sec-intro b{color:var(--ink);font-weight:600}
+  p{margin:0 0 16px}
+  strong{font-weight:600}
+  :not(pre) > code{font-size:.85em;background:#E7EDF3;color:#1C3A4A;padding:1.5px 6px;border-radius:6px;border:1px solid #D7E0E8;white-space:nowrap}
+
+  /* callouts */
+  .note{border-radius:var(--r);padding:18px 20px;margin:22px 0;font-size:15.5px;line-height:1.58;border:1px solid var(--line);background:var(--surface)}
+  .note .tag{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:7px}
+  .note.key{background:#0E1B17;border-color:#0E1B17;color:#E6F0EA}
+  .note.key .tag{color:#86D4A6} .note.key b{color:#FAFEFB}
+  .note.key code:not(pre code){background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.16);color:#C7EAD2}
+  .note.ok{background:var(--ok-bg);border-color:var(--ok-line)} .note.ok .tag{color:var(--ok-ink)}
+  .note.open{background:var(--open-bg);border-color:var(--open-line)} .note.open .tag{color:var(--open)}
+  .note.method{background:var(--shared-bg);border-color:var(--shared-line)} .note.method .tag{color:var(--shared)}
+
+  /* app metadata cards */
+  .apps{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:6px}
+  .acard{border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+  .acard.w3{border-color:var(--wf3-line)} .acard.w1{border-color:var(--wf1-line)}
+  .acard-top{padding:16px 20px}
+  .acard.w3 .acard-top{background:var(--wf3-bg)} .acard.w1 .acard-top{background:var(--wf1-bg)}
+  .acard-tag{font-family:var(--mono);font-size:12px;font-weight:700;display:flex;align-items:center;gap:9px}
+  .acard.w3 .acard-tag{color:var(--wf3-ink)} .acard.w1 .acard-tag{color:var(--wf1-ink)}
+  .acard-tag .pill{width:10px;height:10px;border-radius:3px}
+  .acard.w3 .pill{background:var(--wf3)} .acard.w1 .pill{background:var(--wf1)}
+  .acard-pkg{font-family:var(--mono);font-size:15px;font-weight:700;margin-top:9px;word-break:break-all}
+  .acard.w3 .acard-pkg{color:var(--wf3-ink)} .acard.w1 .acard-pkg{color:var(--wf1-ink)}
+  .acard-body{padding:14px 20px 16px}
+  .meta-row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
+  .meta-row:last-child{border-bottom:none}
+  .meta-row .k{color:var(--ink-faint);font-family:var(--mono);font-size:11.5px}
+  .meta-row .v{font-family:var(--mono);font-size:12px;color:var(--ink);text-align:right;word-break:break-all}
+
+  /* convergence chain */
+  .chain{display:flex;flex-direction:column;gap:0;margin:14px 0 4px;counter-reset:step}
+  .step{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 18px 15px 54px;margin-bottom:10px}
+  .step::before{counter-increment:step;content:counter(step);position:absolute;left:14px;top:14px;width:26px;height:26px;border-radius:8px;background:var(--ok);color:#fff;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:13px}
+  .step .st{font-family:var(--display);font-weight:700;font-size:15.5px;margin:0 0 4px}
+  .step p{margin:0;font-size:14px;color:var(--ink-soft);line-height:1.5}
+  .step p b{color:var(--ink);font-weight:600}
+  .step .ev{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px}
+  .step .ev span{color:var(--ink-faint)}
+  .step .ev b.w3{color:var(--wf3-ink);font-weight:600} .step .ev b.w1{color:var(--wf1-ink);font-weight:600}
+  .chain-arrow{align-self:center;color:var(--ok);margin:-4px 0 6px;font-size:14px}
+
+  /* negative-evidence grid */
+  .neg{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:8px}
+  .negc{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.5}
+  .negc .nx{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ok);display:flex;align-items:center;gap:7px;margin-bottom:6px}
+  .negc .nx i{color:#8FA3AE;font-style:normal}
+  .negc b{color:var(--ink);font-weight:600}
+  .negc code:not(pre code){font-size:.82em}
+
+  /* tables */
+  .tbl-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+  table.t{width:100%;border-collapse:collapse;font-size:13.5px;min-width:820px}
+  table.t thead th{background:#F4F7FA;text-align:left;font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.02em;padding:11px 13px;border-bottom:1px solid var(--line);white-space:nowrap;color:var(--ink);vertical-align:bottom}
+  table.t thead th.w3{color:var(--wf3-ink);border-bottom:2px solid var(--wf3)}
+  table.t thead th.w1{color:var(--wf1-ink);border-bottom:2px solid var(--wf1)}
+  table.t td{padding:11px 13px;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--ink-soft);line-height:1.45}
+  table.t td b{color:var(--ink);font-weight:600}
+  table.t tbody tr:last-child td{border-bottom:none}
+  table.t tbody tr.diff{background:#FFF8F0}
+  table.t tbody tr:hover{background:#FAFBFD}
+  .mcode{font-family:var(--display);font-weight:800;color:var(--ink-faint);font-size:13px}
+
+  .ch{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap;display:inline-block;letter-spacing:.02em}
+  .ch.same{background:var(--ok-bg);color:var(--ok-ink)}
+  .ch.diff{background:var(--wf3-bg);color:var(--wf3-ink);border:1px solid var(--wf3-line)}
+  .ch.yes{background:var(--ok-bg);color:var(--ok-ink)}
+  .ch.no{background:#E9EEF3;color:#5A6B7A}
+  .ch.np{background:#E9EEF3;color:#5A6B7A}
+
+  /* version diff cards */
+  .vdiffs{display:flex;flex-direction:column;gap:16px;margin-top:6px}
+  .vd{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .vd-top{padding:15px 20px 12px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#FFF8F0}
+  .vd-n{font-family:var(--display);font-weight:800;font-size:13px;color:var(--wf3-ink);background:#fff;border:1px solid var(--wf3-line);width:26px;height:26px;border-radius:8px;display:grid;place-items:center}
+  .vd-t{font-family:var(--display);font-weight:700;font-size:16.5px}
+  .vd-impact{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-left:auto}
+  .vd-body{padding:0}
+  .vd-cmp{display:grid;grid-template-columns:1fr 1fr}
+  .vd-cell{padding:15px 20px}
+  .vd-cell.w3{border-right:1px solid var(--line-soft)}
+  .vd-cell .vh{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.04em;margin-bottom:7px}
+  .vd-cell.w3 .vh{color:var(--wf3-ink)} .vd-cell.w1 .vh{color:var(--wf1-ink)}
+  .vd-cell p{margin:0;font-size:14px;color:var(--ink-soft);line-height:1.5}
+  .vd-cell p b{color:var(--ink);font-weight:600}
+  .vd-why{padding:13px 20px;background:#F7F9FC;font-size:14px;line-height:1.5;color:var(--ink-soft);border-top:1px solid var(--line-soft)}
+  .vd-why .wl{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--wf3-ink);display:block;margin-bottom:4px}
+  .vd-why b{color:var(--ink);font-weight:600}
+
+  /* open questions */
+  .q{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line-soft);font-size:15px;line-height:1.5;color:var(--ink-soft)}
+  .q:last-child{border-bottom:none}
+  .q .qm{flex-shrink:0;font-family:var(--mono);font-weight:700;color:var(--open);font-size:13px;margin-top:1px}
+  .q b{color:var(--ink);font-weight:600}
+
+  /* direction split */
+  .dirs{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:6px}
+  .dir{border-radius:16px;border:1px solid var(--line);overflow:hidden;background:var(--surface)}
+  .dir-top{padding:16px 20px;color:#fff}
+  .dir.client .dir-top{background:linear-gradient(135deg,#0C7489,#0A5566)}
+  .dir.backend .dir-top{background:linear-gradient(135deg,#15803D,#0F5C2C)}
+  .dir-top .dt{font-family:var(--display);font-weight:800;font-size:18px}
+  .dir-top .ds{font-size:13px;opacity:.9;margin-top:3px}
+  .dir-body{padding:14px 20px 18px;display:flex;flex-direction:column;gap:11px}
+  .di{display:flex;gap:11px;font-size:14px;line-height:1.48;color:var(--ink-soft)}
+  .di .dk{flex-shrink:0;width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-size:11px;font-weight:700;margin-top:1px}
+  .dir.client .dk{background:var(--wf1-bg);color:var(--wf1-ink)} .dir.backend .dk{background:var(--ok-bg);color:var(--ok-ink)}
+  .di b{color:var(--ink);font-weight:600}
+  .dir-foot{margin:2px 20px 16px;font-size:12.5px;color:var(--ink-faint);font-style:italic;line-height:1.45}
+
+  /* ===== solution design ===== */
+  .tracks{display:flex;flex-direction:column;gap:18px;margin-top:6px}
+  .track{border-radius:16px;border:1px solid var(--line);overflow:hidden;background:var(--surface)}
+  .track-top{padding:15px 22px;color:#fff;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .track.client .track-top{background:linear-gradient(135deg,#0C7489,#0A5566)}
+  .track.backend .track-top{background:linear-gradient(135deg,#15803D,#0F5C2C)}
+  .track.trigger .track-top{background:linear-gradient(135deg,#B4530A,#7C3A07)}
+  .track-top .tt{font-family:var(--display);font-weight:800;font-size:18px}
+  .track-top .tsub{font-size:13px;opacity:.92;margin-left:auto;text-align:right}
+  .track-body{padding:4px 22px 12px}
+  .fix{padding:14px 0;border-bottom:1px dashed var(--line-soft)}
+  .fix:last-child{border-bottom:none}
+  .fix-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px}
+  .fix-code{font-family:var(--display);font-weight:800;font-size:12.5px;min-width:32px;height:24px;padding:0 7px;border-radius:7px;display:grid;place-items:center;flex-shrink:0}
+  .track.client .fix-code{background:var(--wf1-bg);color:var(--wf1-ink)}
+  .track.backend .fix-code{background:var(--ok-bg);color:var(--ok-ink)}
+  .track.trigger .fix-code{background:var(--wf3-bg);color:var(--wf3-ink)}
+  .fix-t{font-family:var(--display);font-weight:700;font-size:15.5px}
+  .fix-m{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:#E9EEF3;color:#5A6B7A;letter-spacing:.03em}
+  .fix-m.ver{background:var(--wf3-bg);color:var(--wf3-ink)}
+  .fix p{margin:0 0 5px;font-size:14px;color:var(--ink-soft);line-height:1.5}
+  .fix p b{color:var(--ink);font-weight:600}
+  .fix .to{font-size:12.5px;color:#92620A;background:#FBEFD6;border-radius:8px;padding:8px 11px;line-height:1.45;margin-top:6px}
+  .fix .to b{color:#6E4906}
+  .fix .to .tol{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
+
+  .p{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;white-space:nowrap;display:inline-block}
+  .p.g{background:var(--ok-bg);color:var(--ok-ink)} .p.a{background:#FBEFD6;color:#92620A} .p.r{background:var(--open-bg);color:var(--open)} .p.s{background:#E9EEF3;color:#5A6B7A}
+  .p.cl{background:var(--wf1-bg);color:var(--wf1-ink)} .p.be{background:var(--ok-bg);color:var(--ok-ink)} .p.api{background:var(--wf3-bg);color:var(--wf3-ink)}
+
+  .phases{display:flex;flex-direction:column;gap:13px;margin-top:6px}
+  .ph{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 20px;position:relative;overflow:hidden}
+  .ph::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px}
+  .ph.p0::before{background:var(--wf1)} .ph.p1::before{background:var(--ok)} .ph.p2::before{background:#5A6B7A}
+  .ph-head{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:7px}
+  .ph-tag{font-family:var(--display);font-weight:800;font-size:13px;padding:3px 11px;border-radius:8px;color:#fff}
+  .ph.p0 .ph-tag{background:var(--wf1)} .ph.p1 .ph-tag{background:var(--ok)} .ph.p2 .ph-tag{background:#5A6B7A}
+  .ph-t{font-family:var(--display);font-weight:700;font-size:16px}
+  .ph-when{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-left:auto}
+  .ph p{margin:0;font-size:14.5px;color:var(--ink-soft);line-height:1.5}
+  .ph p b{color:var(--ink);font-weight:600}
+
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:13px;margin-top:8px}
+  .metric{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .metric .mt{font-family:var(--display);font-weight:600;font-size:14px;margin-bottom:5px}
+  .metric .mg{font-size:13px;color:var(--ink-soft);line-height:1.45}
+  .metric .mg b{color:var(--ok-ink);font-weight:600}
+
+  /* footer */
+  footer{background:#0E1B17;color:#9CB0A4;padding:40px 0 46px;font-size:13.5px}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:flex-start}
+  footer b{color:#E6F0EA;font-weight:600}
+  footer .legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px}
+  footer .lg{display:flex;align-items:center;gap:7px}
+  footer .lg i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  footer .foot-note{max-width:50ch;line-height:1.55}
+
+  @media (max-width:920px){
+    .hero-grid{grid-template-columns:1fr;gap:32px}
+    .apps,.dirs{grid-template-columns:1fr}
+    .vd-cmp{grid-template-columns:1fr} .vd-cell.w3{border-right:none;border-bottom:1px solid var(--line-soft)}
+  }
+  @media (max-width:640px){body{font-size:16px}section{padding:46px 0}.wrap{padding:0 18px}}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+  :focus-visible{outline:2.5px solid var(--ok);outline-offset:2px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span> Đối chiếu audit · airapi</div>
+    <nav class="navlinks">
+      <a href="#boicanh">Bối cảnh</a>
+      <a href="#haiapp">2 app</a>
+      <a href="#hoitu">Nguyên nhân chung</a>
+      <a href="#matran">Ma trận M1–M12</a>
+      <a href="#khacbiet">Khác biệt version</a>
+      <a href="#xacnhan">Cần xác nhận</a>
+      <a href="#huong">Hướng fix</a>
+      <a href="#giaiphap">Giải pháp</a>
+      <a href="#lotrinh">Lộ trình</a>
+    </nav>
+  </div>
+</div>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <span class="eyebrow">Phân tích đối chiếu · từ audit mã nguồn</span>
+        <h1>Hai app, một nguyên nhân:<br>tải <span class="host">airapi</span> tại mốc giờ chẵn</h1>
+        <p class="lead">Tổng hợp từ <b>hai audit mã nguồn</b> (đọc source trực tiếp, file:line đã verify) trên app <b>WF3</b> và <b>WF1</b>. Chạy cùng một quy trình trên cả hai cho kết quả <b>hội tụ</b>: cùng một nguồn tải airapi, cùng một kết luận về mốc :00. Khác biệt chỉ còn ở <b>vài chi tiết version</b>.</p>
+        <div class="chips">
+          <span class="chip">🔬 <b>Phân tích — chưa phải giải pháp</b></span>
+          <span class="chip">📥 Nguồn: 2 audit code (2026-06-29)</span>
+          <span class="chip">✅ Mọi kết luận có file:line</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Bảng hội tụ — cùng câu hỏi, cùng đáp án</div>
+        <div class="panel-sub">// xác nhận trực tiếp trong code, cả 2 app</div>
+        <table class="board">
+          <thead><tr><th class="q">Câu hỏi then chốt</th><th class="w3">WF3</th><th class="w1">WF1</th></tr></thead>
+          <tbody>
+            <tr><td><code>owm.php</code> né cache → bắn airapi mỗi read <span style="color:#5FD68C">(driver)</span></td><td class="c yes">CÓ</td><td class="c yes">CÓ</td></tr>
+            <tr><td>Widget <code>TIME_TICK</code> gọi airapi</td><td class="c no">KHÔNG</td><td class="c no">KHÔNG</td></tr>
+            <tr><td>Có anchor :00 trong 2 app này</td><td class="c no">KHÔNG</td><td class="c no">KHÔNG</td></tr>
+            <tr><td>Daily notif căn mốc giờ tròn</td><td class="c no">KHÔNG</td><td class="c no">KHÔNG</td></tr>
+          </tbody>
+        </table>
+        <div class="board-cap">Hai cột <b>khớp nhau ở mọi dòng</b> → hai app cùng cơ chế. Cái đáng lo (<code>owm.php</code> né cache) có ở cả hai; cái bị nghi oan (widget, daily, :00-client) đều không phải.</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- 1. BỐI CẢNH -->
+<section id="boicanh">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">01</span> Bối cảnh & phương pháp</div>
+    <h2 class="sec-title">Đối chiếu trên bằng chứng mã nguồn</h2>
+    <p class="sec-intro">Triệu chứng backend: <code>airapi.tohapp.com</code> spike <b>3–5×</b> đúng phút <b>:00–:01</b> mỗi giờ, gần 100% từ <code>okhttp/5.0.0-alpha.4</code> → Apache prefork bão hoà → <code>ConnectTimeout</code>, kéo theo <code>wth365</code>/<code>thoitiet24h</code>.</p>
+
+    <div class="note method">
+      <span class="tag">Nguồn & phạm vi</span>
+      Tài liệu này tổng hợp <b>duy nhất từ hai audit mã nguồn</b> chạy trực tiếp trên hai repo (đọc source, grep, trace, <b>mọi kết luận kèm file:line đã verify</b>). Nó <b>không dựa trên</b> các tài liệu chẩn đoán giả thuyết trước đó. Phạm vi: mọi cơ chế trong app gây request tới <code>airapi</code>, đặc biệt thứ có thể đồng bộ vào HH:00. <b>Chỉ phân tích — chưa đề xuất giải pháp.</b>
+    </div>
+
+    <p>Điểm mấu chốt khi đặt hai audit cạnh nhau: vì cùng một bộ câu hỏi rigorous được áp lên cả hai codebase, kết quả <b>hội tụ</b> chứ không phân kỳ. Hai app dùng <b>chung module <code>airquality</code></b> (ở hai version khác nhau), nên cơ chế chạm airapi gần như giống hệt. Câu chuyện vì thế đơn giản hơn nhiều so với cảm nhận ban đầu: <b>một nguyên nhân chung phía client + một dấu hỏi chưa định danh về nguồn đồng bộ :00</b>, cộng vài khác biệt version nhỏ.</p>
+  </div>
+</section>
+
+<!-- 2. HAI APP -->
+<section id="haiapp">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">02</span> Hai app</div>
+    <h2 class="sec-title">Cùng SDK <code>airquality</code>, khác repo & version</h2>
+    <p class="sec-intro">Hai app là hai repo/branch khác nhau nhưng <b>chia sẻ module airquality</b> — lý do cơ chế airapi của chúng trùng nhau gần hết.</p>
+
+    <div class="apps">
+      <div class="acard w3">
+        <div class="acard-top">
+          <div class="acard-tag"><span class="pill"></span> WF3</div>
+          <div class="acard-pkg">com.wftab.weather.forecast</div>
+        </div>
+        <div class="acard-body">
+          <div class="meta-row"><span class="k">repo</span><span class="v">toh-weather</span></div>
+          <div class="meta-row"><span class="k">branch</span><span class="v">phongnx/v1.71</span></div>
+          <div class="meta-row"><span class="k">commit</span><span class="v">6a706e93d</span></div>
+          <div class="meta-row"><span class="k">flavor</span><span class="v">wf3_production · APP_MODE="wf3"</span></div>
+          <div class="meta-row"><span class="k">okhttp</span><span class="v">5.0.0-alpha.4</span></div>
+        </div>
+      </div>
+      <div class="acard w1">
+        <div class="acard-top">
+          <div class="acard-tag"><span class="pill"></span> WF1</div>
+          <div class="acard-pkg">com.droidteam.weather</div>
+        </div>
+        <div class="acard-body">
+          <div class="meta-row"><span class="k">repo</span><span class="v">toh-weather-1-new</span></div>
+          <div class="meta-row"><span class="k">branch</span><span class="v">develop_v1.41</span></div>
+          <div class="meta-row"><span class="k">commit</span><span class="v">6e831f9 (2026-06-18)</span></div>
+          <div class="meta-row"><span class="k">retrofit</span><span class="v">2.9.0</span></div>
+          <div class="meta-row"><span class="k">okhttp</span><span class="v">5.0.0-alpha.4</span></div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:var(--ink-soft);margin-top:18px">Cả hai cùng base <code>https://airapi.tohapp.com/</code> với 2 endpoint: <code>airquality_iqair.php</code> (type=9, request AQI chính) + <code>airquality_owm.php</code> (type=1, bổ sung pollutant). Mọi truy cập AQI đi qua <code>AirQualityModules.getAQIDetailByLocationId → AQIHelperDataV2</code>.</p>
+  </div>
+</section>
+
+<!-- 3. NGUYÊN NHÂN CHUNG -->
+<section id="hoitu">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">03</span> Nguyên nhân chung</div>
+    <h2 class="sec-title">Nguồn tải airapi lớn nhất: <code>owm.php</code> né cache</h2>
+    <p class="sec-intro">Ở <b>cả hai app</b>, nguồn tải airapi áp đảo là nhánh bổ sung pollutant <code>getMorePollutantsAQI → owm.php</code> — đi vòng qua cache, không dedup, tự khuếch đại. Đây là chuỗi cơ chế (xác nhận trong code cả hai):</p>
+
+    <div class="chain">
+      <div class="step">
+        <p class="st">Đọc AQI trả từ cache — nhưng vẫn chạy nhánh bổ sung</p>
+        <p>Khi cache <code>iqair</code> còn hạn (<code>isFromCache()==true</code>), code <b>vẫn gọi <code>shouldGetMorePollutantsAQI</code> vô điều kiện</b> → TTL 30′ <b>không áp</b> cho <code>owm.php</code>.</p>
+        <div class="ev"><span>WF3 <b class="w3">AQIHelperDataV2:230-234</b></span><span>WF1 <b class="w1">:226-234 (dòng 233)</b></span></div>
+      </div>
+      <div class="chain-arrow">▼</div>
+      <div class="step">
+        <p class="st">Điều kiện kích hoạt: thiếu field <code>conc</code></p>
+        <p><code>isAqiDetailIncomplete</code> = true nếu thiếu <b>bất kỳ 1 trong 6</b> field nồng độ (CO/NO2/O3/SO2/PM2.5/PM10), parse từ <code>optString("conc","")</code>. → bắn <code>owm.php</code>.</p>
+        <div class="ev"><span>WF3 <b class="w3">:259-265</b> · AQIDetail:129-154</span><span>WF1 <b class="w1">AQIDetail conc fields</b></span></div>
+      </div>
+      <div class="chain-arrow">▼</div>
+      <div class="step">
+        <p class="st">Nhánh <code>owm.php</code> KHÔNG có dedup</p>
+        <p>Request chính (<code>iqair</code>) có <code>mInFlightRequests</code>; nhánh <code>owm.php</code> subscribe thẳng → <b>nhiều caller cùng địa điểm bắn song song</b>.</p>
+        <div class="ev"><span>WF3 <b class="w3">:69,219-223 vs :268</b></span><span>WF1 <b class="w1">:222 vs :268-294</b></span></div>
+      </div>
+      <div class="chain-arrow">▼</div>
+      <div class="step">
+        <p class="st">Fail/thiếu field → KHÔNG hội tụ (vòng lặp dương)</p>
+        <p><code>mergeOWMToAQIDetail</code> ghi cả <b>chuỗi rỗng</b> cho field thiếu; <code>onError</code> không đặt cờ, <b>không negative-cache</b> → data ở lại incomplete → <b>mỗi read sau lại bắn <code>owm.php</code></b>.</p>
+        <div class="ev"><span>WF3 <b class="w3">:286-288, 340-358</b></span><span>WF1 <b class="w1">:287, 351</b></span></div>
+      </div>
+      <div class="chain-arrow">▼</div>
+      <div class="step">
+        <p class="st">airapi chậm → retry storm tự khuếch đại</p>
+        <p><code>retryOnConnectionFailure=true</code> (mặc định) + không backoff/<code>Retry-After</code> + timeout dài + không HTTP cache → giữ connection, cộng tải đúng lúc server yếu → <b>blip ngắn thành spike kéo dài</b>.</p>
+        <div class="ev"><span>WF3 <b class="w3">M9–M11</b></span><span>WF1 <b class="w1">M9–M11</b></span></div>
+      </div>
+    </div>
+
+    <h2 class="sec-title" style="margin-top:42px">Mốc :00 không nằm trong 2 app này</h2>
+    <p class="sec-intro">Cả hai audit đều grep & trace toàn repo: <b>không cơ chế nào trong 2 app này</b> đồng bộ request airapi vào đầu giờ. Bốn bằng chứng phủ định, giống nhau ở cả hai app:</p>
+
+    <div class="neg">
+      <div class="negc"><div class="nx"><i>✗</i> Widget TIME_TICK</div>Neo giây :00 mỗi phút nhưng <b>chỉ vẽ lại UI</b>, <b>không gọi airapi</b> (grep network trong WidgetUtils = rỗng).</div>
+      <div class="negc"><div class="nx"><i>✗</i> Daily/Tomorrow notif</div>Fire theo <b>giờ user chọn</b> + giây random, 2×/ngày — không phải :00.</div>
+      <div class="negc"><div class="nx"><i>✗</i> Cache AQI 30′</div><b>elapsed-time per-device</b> theo <code>updatedTime</code> → hết hạn rải đều, không khoá pha giữa các máy.</div>
+      <div class="negc"><div class="nx"><i>✗</i> Anchor mốc giờ tròn</div>grep <code>%3600</code>/<code>nextHour</code>/<code>setRepeating</code>-hằng-giờ → <b>NOT PRESENT</b>; mọi worker tương đối + jitter 0–58s.</div>
+    </div>
+
+    <div class="note key">
+      <span class="tag">Suy ra — đúng cách</span>
+      Server báo <b>100% traffic là Android</b>, và spike là spike <b>SỐ LƯỢNG</b> (3–5× request). Server <b>không tự đẻ request</b> → cú đồng bộ số-lượng tại :00 <b>bắt buộc là client-driven</b>. Hai app này không neo :00 → nguồn nằm ở <b>client KHÁC, chưa định danh</b>: (a) một <b>app/version khác</b> trên cùng SDK có timer hằng giờ; (b) một <b>job backend (FCM/cron) đánh thức</b> loạt client mỗi giờ; (c) <b>retry</b> cộng dồn. “Server regen cache”, nếu có, chỉ giải thích <b>độ chậm</b> mỗi request — <b>không tạo thêm request</b> — và còn phụ thuộc giả định server có cache (<b>chưa verify</b>). ⇒ Việc cần làm là <b>ĐỊNH DANH nguồn :00</b> bằng cách <b>tách log theo app/version</b> + <b>rà job đẩy hằng giờ</b>, chứ chưa mặc định là server.
+    </div>
+  </div>
+</section>
+
+<!-- 4. MA TRẬN -->
+<section id="matran">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">04</span> Ma trận đối chiếu</div>
+    <h2 class="sec-title">M1–M12 cạnh nhau</h2>
+    <p class="sec-intro">Tổng hợp từ §8 của hai audit. <span class="ch same">Trùng</span> = cùng cơ chế (fix một lần áp cho cả hai) · <span class="ch diff">Khác version</span> = chi tiết khác giữa hai branch (phải để ý khi fix). Dòng tô vàng = khác version.</p>
+
+    <div class="tbl-scroll">
+      <table class="t">
+        <thead><tr><th>M</th><th>Cơ chế</th><th class="w3">WF3 · com.wftab</th><th class="w1">WF1 · com.droidteam</th><th>Đối chiếu</th></tr></thead>
+        <tbody>
+          <tr><td class="mcode">M1</td><td>Cache AQI 30′ (per-device, elapsed)</td><td>CONFIRMED · gate iqair<br><code style="font-size:11px">AQIHelperDataV2:85-95</code></td><td>CONFIRMED · gate iqair<br><code style="font-size:11px">:94</code></td><td><span class="ch same">Trùng</span></td></tr>
+          <tr><td class="mcode">M2</td><td><b><code>owm.php</code> né cache</b> (driver chính)</td><td>CONFIRMED · gọi owm<br><code style="font-size:11px">:230-234</code></td><td>CONFIRMED · gọi owm<br><code style="font-size:11px">:233, 270</code></td><td><span class="ch same">Trùng</span></td></tr>
+          <tr><td class="mcode">M3</td><td>In-flight dedup</td><td>iqair: có / owm: <b>không</b></td><td>iqair: có / owm: <b>không</b></td><td><span class="ch same">Trùng</span></td></tr>
+          <tr><td class="mcode">M4</td><td>Widget TIME_TICK</td><td>CONFIRMED · <b>KHÔNG gọi airapi</b></td><td>CONFIRMED · <b>KHÔNG gọi airapi</b></td><td><span class="ch same">Trùng</span></td></tr>
+          <tr class="diff"><td class="mcode">M5</td><td>Cascade weather→AQI</td><td>CÓ · qua <b>broadcast</b> <code>WEATHER_DATA_CHANGED</code></td><td>CÓ · <b>gọi trực tiếp</b> (không broadcast)</td><td><span class="ch diff">Khác version</span></td></tr>
+          <tr><td class="mcode">M6</td><td>Daily/Tomorrow notif</td><td>CÓ ×N · <b>giờ user + random giây</b></td><td>CÓ ×N · <b>giờ user + random giây</b></td><td><span class="ch same">Trùng</span></td></tr>
+          <tr><td class="mcode">M7</td><td>Anchor mốc giờ tròn</td><td><b>NOT PRESENT</b></td><td><b>NOT PRESENT</b></td><td><span class="ch same">Trùng</span></td></tr>
+          <tr><td class="mcode">M8</td><td>Vòng lặp dương / negative-cache</td><td>loop CÓ / neg-cache <b>không</b></td><td>loop CÓ / neg-cache <b>không</b></td><td><span class="ch same">Trùng</span></td></tr>
+          <tr><td class="mcode">M9</td><td>OkHttp retry/backoff/Retry-After</td><td>retry=true · no backoff/Retry-After</td><td>retry=true · no backoff/Retry-After</td><td><span class="ch same">Trùng</span></td></tr>
+          <tr class="diff"><td class="mcode">M10</td><td>Timeout client airapi</td><td>connect/read 30s · <b>callTimeout VÔ HẠN</b> ⚠</td><td>connect 30 / <b>call 60</b> / read 30s</td><td><span class="ch diff">Khác version</span></td></tr>
+          <tr><td class="mcode">M11</td><td>HTTP cache / conditional GET</td><td><b>NOT PRESENT</b> (mọi client)</td><td><b>NOT PRESENT</b> (mọi client)</td><td><span class="ch same">Trùng</span></td></tr>
+          <tr class="diff"><td class="mcode">M12</td><td>Caller airapi khác</td><td>realtime/badweather · <b>+ WearableHelper</b></td><td>realtime/badweather</td><td><span class="ch diff">Khác version</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note ok" style="margin-top:22px">
+      <span class="tag">Đọc ma trận</span>
+      <b>9/12 cơ chế trùng nhau</b> → phần lõi (lỗi né cache, thiếu dedup/negative-cache, retry mù, không HTTP cache, không anchor :00) là <b>chung cho cả hai app</b>: sửa ở module dùng chung là áp được cả hai. Chỉ <b>3 cơ chế khác version</b> (M5, M10, M12) cần xử lý theo từng branch.
+    </div>
+  </div>
+</section>
+
+<!-- 5. KHÁC BIỆT VERSION -->
+<section id="khacbiet">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">05</span> Khác biệt version</div>
+    <h2 class="sec-title">Ba điểm khác nhau thật giữa hai branch</h2>
+    <p class="sec-intro">Đây là <b>khác biệt incidental do version drift</b>, không phải nguyên nhân khác nhau. Nhưng cần để ý vì fix phải viết riêng theo từng codebase.</p>
+
+    <div class="vdiffs">
+      <div class="vd">
+        <div class="vd-top"><span class="vd-n">1</span><span class="vd-t">callTimeout client airapi</span><span class="vd-impact">ảnh hưởng resilience</span></div>
+        <div class="vd-cmp">
+          <div class="vd-cell w3"><div class="vh">WF3 · com.wftab</div><p><code>callTimeout</code> <b>KHÔNG set = vô hạn</b> (chỉ connect/read 30s). Client airapi lỏng nhất — một call kẹt có thể giữ socket vô thời hạn.</p></div>
+          <div class="vd-cell w1"><div class="vh">WF1 · com.droidteam</div><p><code>callTimeout = 60s</code> (connect 30 / call 60 / read 30). Vẫn dài nhưng <b>có chặn trên</b>.</p></div>
+        </div>
+        <div class="vd-why"><span class="wl">Vì sao quan trọng</span>Khi airapi nghẽn, WF3 giữ connection/prefork <b>lâu hơn hẳn</b> → góp phần cạn worker nhanh hơn. Cùng là "timeout quá lỏng" nhưng WF3 ở mức nặng hơn.</div>
+      </div>
+
+      <div class="vd">
+        <div class="vd-top"><span class="vd-n">2</span><span class="vd-t">Cơ chế cascade weather → AQI</span><span class="vd-impact">ảnh hưởng cách fix</span></div>
+        <div class="vd-cmp">
+          <div class="vd-cell w3"><div class="vh">WF3 · com.wftab</div><p>Qua <b>event broadcast</b>: lưu weather → <code>GreenDAOHelper</code> post <code>WEATHER_DATA_CHANGED</code> → màn foreground nhận → gọi airapi.</p></div>
+          <div class="vd-cell w1"><div class="vh">WF1 · com.droidteam</div><p><b>Gọi trực tiếp</b> trong ViewModel: <code>onGetWeatherSuccess → fetchAirQualityData</code>. <b>Không</b> có broadcast <code>WEATHER_DATA_CHANGED</code>.</p></div>
+        </div>
+        <div class="vd-why"><span class="wl">Vì sao quan trọng</span>Hệ quả giống nhau (foreground load weather → gọi airapi), nhưng <b>điểm đặt fix khác nhau</b>: chặn/debounce ở event-bus (WF3) vs ở luồng gọi trực tiếp (WF1).</div>
+      </div>
+
+      <div class="vd">
+        <div class="vd-top"><span class="vd-n">3</span><span class="vd-t">Caller airapi thêm: WearableHelper</span><span class="vd-impact">ảnh hưởng phạm vi</span></div>
+        <div class="vd-cmp">
+          <div class="vd-cell w3"><div class="vh">WF3 · com.wftab</div><p>Có thêm <code>WearableHelper</code> gọi airapi khi <b>sync sang wearable</b> (<code>WearableHelper.kt:475</code>).</p></div>
+          <div class="vd-cell w1"><div class="vh">WF1 · com.droidteam</div><p><b>Không liệt kê</b> caller wearable trong inventory.</p></div>
+        </div>
+        <div class="vd-why"><span class="wl">Vì sao quan trọng</span>WF3 có thêm một đường phát airapi mà WF1 không có → khi rà soát/giảm tải, đừng giả định danh sách caller hai app y hệt nhau.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. CẦN XÁC NHẬN -->
+<section id="xacnhan">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">06</span> Còn cần xác nhận</div>
+    <h2 class="sec-title">Phần code đã rõ — còn lại là runtime/backend</h2>
+    <p class="sec-intro">Phân tích ở mức code đã chốt. Hai dấu hỏi còn lại (cả hai audit đều nêu giống nhau) cần đo runtime / hỏi backend để đóng đinh.</p>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px 20px">
+      <div class="q"><span class="qm">★</span><div><b>Trigger:</b> response <code>airquality_iqair.php</code> hiện còn trả field <code>conc</code> cho 6 chất không? Nếu <b>thiếu</b> → đó là cú kích biến lỗi né cache tiềm ẩn thành <b>bắn <code>owm.php</code> diện rộng, vĩnh viễn</b>. (1 request thật là kiểm tra được + đối chiếu ngày deploy API mới.)</div></div>
+      <div class="q"><span class="qm">★</span><div><b>Nguồn neo :00 (client-driven, vì 100% Android):</b> tách được log theo <b>app/version</b> (header/param/path) để biết app nào thật sự spike không? Và backend có <b>job FCM/cron đẩy hằng giờ</b> đánh thức client không? → định danh nguồn đồng bộ :00 (không phải 2 app đã audit).</div></div>
+      <div class="q"><span class="qm">○</span><div><b>Cache server (chỉ là yếu tố latency):</b> server airapi có lớp cache + TTL/cron theo giờ không? Nếu có, nó giải thích <i>độ chậm</i> request đầu giờ — <b>không</b> giải thích số lượng. Thứ yếu so với câu trên.</div></div>
+      <div class="q"><span class="qm">○</span><div><b>Định lượng thực:</b> tỷ lệ <code>owm.php</code> vs <code>iqair.php</code> trong traffic, số request/máy, phân bố theo phút — cần log/APM (server không phân biệt được 2 app vì cùng User-Agent <code>okhttp/5.0.0-alpha.4</code>).</div></div>
+      <div class="q"><span class="qm">○</span><div><b>owm.php đủ field?</b> response <code>owm.php</code> có trả đủ 6 component không — nếu thiếu thì vòng lặp dương thành vĩnh viễn.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. HƯỚNG FIX -->
+<section id="huong">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">07</span> Hướng fix mở ra</div>
+    <h2 class="sec-title">Tách sạch hai phía</h2>
+    <p class="sec-intro">Phân tích chỉ ra hai khối vấn đề độc lập, thuộc <b>hai đội khác nhau</b>. Đây là <b>tổng quan</b> tách phía — chi tiết thiết kế ở mục 08 ngay dưới.</p>
+
+    <div class="dirs">
+      <div class="dir client">
+        <div class="dir-top"><div class="dt">Phía Client</div><div class="ds">cắt baseline + vòng lặp · cả 2 app (code riêng theo version)</div></div>
+        <div class="dir-body">
+          <div class="di"><span class="dk">1</span><div><b>Lỗi né cache <code>owm.php</code></b> — trọng tâm: cho nhánh bổ sung tôn trọng cache / thêm dedup / negative-cache / ngừng ghi chuỗi rỗng. Đây là nguồn tải airapi lớn nhất ở cả hai app.</div></div>
+          <div class="di"><span class="dk">2</span><div><b>Resilience</b> — retry có backoff + tôn trọng <code>Retry-After</code>; chặn timeout (đặc biệt <code>callTimeout</code> <b>vô hạn</b> của WF3).</div></div>
+          <div class="di"><span class="dk">3</span><div><b>Theo version</b> — điểm cascade (broadcast vs direct), caller WearableHelper (WF3) xử lý riêng từng branch.</div></div>
+        </div>
+        <div class="dir-foot">Không phụ thuộc backend → làm được ngay. Giảm tải airapi ở mọi thời điểm (kể cả nền cao sẵn).</div>
+      </div>
+
+      <div class="dir backend">
+        <div class="dir-top"><div class="dt">Phía Backend</div><div class="ds">sở hữu đỉnh :00 — chính là "đồng thời mốc giờ chẵn"</div></div>
+        <div class="dir-body">
+          <div class="di"><span class="dk">1</span><div><b>Định danh nguồn neo :00</b> — spike :00 là <b>client-driven</b> (100% Android) nhưng KHÔNG từ 2 app này. Backend tách log theo <b>app/version</b> + rà <b>job đẩy hằng giờ</b> để tìm nguồn. Fix tùy kết quả: app khác có timer → thêm jitter; job backend đẩy hằng giờ → rải lịch.</div></div>
+          <div class="di"><span class="dk">2</span><div><b>HTTP/edge cache</b> — thêm ETag/Cache-Control + CDN (AQI đổi theo giờ → cacheable cao) để hấp thụ herd trước origin.</div></div>
+          <div class="di"><span class="dk">3</span><div><b>Giảm vạ lây</b> — tách pool/infra để airapi chậm không kéo <code>wth365</code>/<code>thoitiet24h</code>.</div></div>
+        </div>
+        <div class="dir-foot">Đây là nơi đỉnh HH:00 thực sự được giải quyết — không phải fix mobile.</div>
+      </div>
+    </div>
+
+    <div class="note key" style="margin-top:26px">
+      <span class="tag">Một câu chốt</span>
+      Đỉnh airapi tại mốc giờ chẵn là <b>tổng của: một lỗi client thổi phồng baseline ở cả hai app</b> (<code>owm.php</code> né cache) <b>+ một cú đồng bộ :00 client-driven nhưng chưa định danh</b> (app/version khác, hoặc job backend đẩy hằng giờ). Phần baseline fix được ngay phía client; phần :00 phải <b>định danh trước</b> (tách log). Gỡ trigger <code>conc</code> phía API là việc nên làm sớm nhất vì nó quyết định độ lớn của baseline.
+    </div>
+  </div>
+</section>
+
+<!-- 8. THIẾT KẾ GIẢI PHÁP -->
+<section id="giaiphap">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">08</span> Thiết kế giải pháp</div>
+    <h2 class="sec-title">Ba khối: Client · Backend · API</h2>
+    <p class="sec-intro">Mỗi giải pháp gắn với mã cơ chế (M) đã verify ở trên. Trạng thái: thiết kế hướng + đánh đổi; chi tiết từng dòng để ở PR/ticket.</p>
+
+    <div class="note open">
+      <span class="tag">Lưu ý định hướng (sửa lại so với cách nghĩ ban đầu)</span>
+      Cú đồng bộ <code>:00</code> là <b>client-driven</b> (server báo 100% Android — server không tự đẻ request), nhưng <b>KHÔNG từ 2 app đã audit</b> → nguồn chưa định danh (app/version khác, hoặc job backend đẩy hằng giờ). Vì thế phần client <b>KHÔNG phải “rải thời điểm” 2 app này</b> mà là <b>diệt amplifier <code>owm.php</code> + tăng resilience</b> (giảm baseline ở mọi thời điểm, hạ cả chiều cao đỉnh :00). Còn việc <b>định danh & xử lý đúng cú :00</b> phải <b>tách log trước</b> — chưa thể chốt fix. Đây là điểm sửa lại so với giả định cũ ("server regen").
+    </div>
+
+    <div class="tracks">
+      <!-- CLIENT -->
+      <div class="track client">
+        <div class="track-top"><span class="tt">🟦 Client</span><span class="tsub">diệt amplifier + resilience · cả 2 app (code riêng theo version)</span></div>
+        <div class="track-body">
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">C1</span><span class="fix-t">Gate <code>owm.php</code> theo cache</span><span class="fix-m">M2</span></div>
+            <p>Khi data trả từ cache, <b>không gọi <code>shouldGetMorePollutantsAQI</code> vô điều kiện</b> — chỉ chạy nhánh bổ sung khi main vừa fetch mới (cache-miss), hoặc gate <code>owm</code> bằng elapsed-time riêng (≤1 lần/chu kỳ/địa điểm).</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Nếu cache thật sự thiếu, <code>owm</code> chỉ thử lại ở chu kỳ sau — chấp nhận được (AQI theo giờ, data đã hiển thị).</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">C2</span><span class="fix-t">Negative-cache / marker “đã thử pollutants”</span><span class="fix-m">M8</span></div>
+            <p>Sau khi thử <code>owm</code> cho 1 địa điểm, ghi marker (TTL) <b>bất kể thành/bại</b> → không bắn lại khi marker còn hạn. <b>Phá vòng lặp dương</b> — yếu tố nguy hiểm nhất khi airapi chậm.</p>
+            <div class="to"><span class="tol">Đánh đổi</span><code>owm</code> fail tạm thời không retry tới khi marker hết hạn (chấp nhận: là bổ sung, không phải AQI lõi).</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">C3</span><span class="fix-t">In-flight dedup cho <code>owm.php</code></span><span class="fix-m">M3</span></div>
+            <p>Cho <code>getMorePollutantsAQI</code> đi qua cùng <code>mInFlightRequests</code> / <code>replay(1).autoConnect()</code> như main path, key theo địa điểm → nhiều read cùng địa điểm <b>share 1 request</b>.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Tối thiểu — pattern đã có sẵn ở main path, chỉ áp cho nhánh owm.</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">C4</span><span class="fix-t">Ngừng ghi đè field bằng chuỗi rỗng</span><span class="fix-m">M8</span></div>
+            <p>Trong <code>mergeOWMToAQIDetail</code> và parse chính, <b>chỉ set field <code>conc</code> nếu nguồn có giá trị</b>; không bao giờ ghi <code>""</code> đè giá trị đang có → tránh “re-incomplete mỗi 30′” và tránh owm-fail làm trống field.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Tối thiểu — là fix đúng đắn (correctness).</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">C5</span><span class="fix-t">Retry backoff + jitter, tôn trọng <code>Retry-After</code></span><span class="fix-m">M9</span></div>
+            <p>Thay <code>retryOnConnectionFailure</code> mù bằng policy <b>exponential backoff + jitter</b>, giới hạn số lần, tôn trọng <code>Retry-After</code> (429/503) → chặn retry storm khi server yếu.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Phục hồi chậm hơn chút ở blip; lợi ròng khi tải cao.</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">C6</span><span class="fix-t">Chặn timeout / fail-fast</span><span class="fix-m ver">M10 · theo version</span></div>
+            <p>Đặt <code>callTimeout</code> hợp lý cho client airapi. <b>WF3 đang VÔ HẠN → phải set</b>; WF1 đang 60s → cân nhắc siết. Timeout thấp giải phóng worker Apache prefork nhanh hơn.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>User mạng yếu có thể fail nhiều hơn → kèm fallback hiển thị AQI cũ. <b>Ưu tiên WF3.</b></div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">C7</span><span class="fix-t">Guard cascade + WearableHelper</span><span class="fix-m ver">M5 / M12 · theo version</span></div>
+            <p>Cascade foreground (weather→airapi) cũng <b>tôn trọng cache AQI + debounce</b>; điểm đặt khác nhau: WF3 ở consumer <code>WEATHER_DATA_CHANGED</code>, WF1 ở luồng gọi trực tiếp. <code>WearableHelper</code> (chỉ WF3) áp cùng quy tắc cache.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Nhỏ, ưu tiên thấp — phần lớn đã được C1 bao.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BACKEND -->
+      <div class="track backend">
+        <div class="track-top"><span class="tt">🟩 Backend</span><span class="tsub">định danh nguồn :00 · giảm chi phí origin · giảm vạ lây</span></div>
+        <div class="track-body">
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">B1</span><span class="fix-t">Định danh nguồn neo <code>:00</code> (tách log)</span><span class="fix-m">:00 · chẩn đoán</span></div>
+            <p>Spike :00 là <b>client-driven</b> (100% Android) nhưng không từ 2 app này → <b>tách log theo app/version</b> (header/param/path) + <b>rà job FCM/cron đẩy hằng giờ</b> để tìm nguồn thật. <b>Fix tùy kết quả:</b> app/version khác có timer → thêm jitter (fix client app đó); job backend đẩy hằng giờ → rải lịch (fix backend). Cache server, nếu có, chỉ là yếu tố <i>latency</i>.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Đây là bước <b>chẩn đoán, chưa phải fix</b> — chưa định danh được nguồn :00 thì chưa chốt được giải pháp cho cú :00. Nhưng baseline (C1–C6) vẫn hạ chiều cao đỉnh ngay.</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">B2</span><span class="fix-t">HTTP cache + ETag + CDN/edge</span><span class="fix-m">M11</span></div>
+            <p>Thêm <code>ETag</code> + <code>Cache-Control</code> → client <code>If-None-Match</code> → <code>304</code>. CDN/edge TTL theo giờ + SWR hấp thụ herd trước origin. <b>Lưu ý:</b> response đang base64 (<code>DecryptedPayloadInterceptor</code>) → chưa HTTP-cacheable nguyên trạng, cần điều chỉnh để tầng cache hoạt động.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Chi phí/độ phức tạp CDN + mã hoá cản HTTP cache → bắt đầu bằng cache origin + ETag, đánh giá CDN sau.</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">B3</span><span class="fix-t">Soft rate-limit + <code>Retry-After</code></span><span class="fix-m">M9</span></div>
+            <p>Khi quá tải, trả <code>429 + Retry-After</code> → client (có C5) lùi nhịp thay vì dồn tải.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Vài request bị hoãn; đổi lại bảo vệ origin.</div>
+          </div>
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">B4</span><span class="fix-t">Tách infra / pool</span><span class="fix-m">vạ lây</span></div>
+            <p>Tách pool/process của <code>airapi</code> (hoặc chuyển sang MPM worker/async) để airapi chậm <b>không cạn worker</b> của <code>swtapi</code>/<code>wth365</code>/<code>thoitiet24h</code>.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Công infra; xử lý vạ lây chéo host.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API / TRIGGER -->
+      <div class="track trigger">
+        <div class="track-top"><span class="tt">🟧 API</span><span class="tsub">triệt trigger tại gốc — quyết định độ lớn baseline</span></div>
+        <div class="track-body">
+          <div class="fix">
+            <div class="fix-head"><span class="fix-code">T1</span><span class="fix-t">Xác nhận & khôi phục field <code>conc</code> ở <code>iqair.php</code></span><span class="fix-m">M2 · trigger</span></div>
+            <p>Kiểm tra <code>iqair.php</code> có ngừng trả <code>conc</code> cho vài chất không — đây là cú kích biến lỗi né cache tiềm ẩn thành lũ. Nếu có → <b>khôi phục field</b> (hoặc cập nhật parser theo tên field mới). Triệt điều kiện “incomplete → owm bắn diện rộng” <b>tại gốc</b> — có thể là fix đòn bẩy lớn nhất nếu đúng.</p>
+            <div class="to"><span class="tol">Đánh đổi</span>Phụ thuộc team API; cần runtime check trước (mục 06). Fallback: nới completeness check phía client tạm thời.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-family:var(--display);font-weight:700;font-size:18px;margin:34px 0 6px">Bảng hành động tổng hợp</h3>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 14px">Effort/Impact tương đối để xếp ưu tiên — chốt khi vào ticket. <span class="p g">L</span>/<span class="p a">M</span>/<span class="p r">H</span> = thấp/vừa/cao.</p>
+    <div class="tbl-scroll">
+      <table class="t" style="min-width:780px">
+        <thead><tr><th>#</th><th>Hành động</th><th>M</th><th>Phía</th><th>App</th><th>Effort</th><th>Impact</th><th>Ưu tiên</th></tr></thead>
+        <tbody>
+          <tr><td class="mcode">C1</td><td>Gate <code>owm.php</code> theo cache</td><td>M2</td><td><span class="p cl">Client</span></td><td>cả 2</td><td><span class="p g">L</span></td><td><span class="p r">Cao</span></td><td><span class="p cl">P0</span></td></tr>
+          <tr><td class="mcode">C2</td><td>Negative-cache / marker đã-thử</td><td>M8</td><td><span class="p cl">Client</span></td><td>cả 2</td><td><span class="p a">M</span></td><td><span class="p r">Cao</span></td><td><span class="p cl">P0</span></td></tr>
+          <tr><td class="mcode">C3</td><td>In-flight dedup cho <code>owm.php</code></td><td>M3</td><td><span class="p cl">Client</span></td><td>cả 2</td><td><span class="p g">L</span></td><td><span class="p a">TB</span></td><td><span class="p cl">P0</span></td></tr>
+          <tr><td class="mcode">C4</td><td>Ngừng ghi đè field bằng chuỗi rỗng</td><td>M8</td><td><span class="p cl">Client</span></td><td>cả 2</td><td><span class="p g">L</span></td><td><span class="p a">TB</span></td><td><span class="p cl">P0</span></td></tr>
+          <tr><td class="mcode">C5</td><td>Retry backoff+jitter + <code>Retry-After</code></td><td>M9</td><td><span class="p cl">Client</span></td><td>cả 2</td><td><span class="p g">L</span></td><td><span class="p a">TB</span></td><td><span class="p cl">P0</span></td></tr>
+          <tr><td class="mcode">C6</td><td>Chặn <code>callTimeout</code> (WF3 vô hạn) + fail-fast</td><td>M10</td><td><span class="p cl">Client</span></td><td>WF3 ưu tiên</td><td><span class="p g">L</span></td><td><span class="p a">TB</span></td><td><span class="p cl">P0</span></td></tr>
+          <tr><td class="mcode">T1</td><td>Xác nhận & khôi phục field <code>conc</code></td><td>M2</td><td><span class="p api">API</span></td><td>backend/API</td><td><span class="p a">M</span></td><td><span class="p r">Rất cao*</span></td><td><span class="p be">P1</span></td></tr>
+          <tr><td class="mcode">B2</td><td>HTTP cache + ETag + CDN/edge</td><td>M11</td><td><span class="p be">Backend</span></td><td>—</td><td><span class="p r">H</span></td><td><span class="p r">Rất cao</span></td><td><span class="p be">P1</span></td></tr>
+          <tr><td class="mcode">B1</td><td>Định danh nguồn neo <code>:00</code> (tách log app/version + rà job hằng giờ)</td><td>:00</td><td><span class="p be">Backend</span></td><td>—</td><td><span class="p a">M</span></td><td><span class="p r">Cao</span></td><td><span class="p be">P1</span></td></tr>
+          <tr><td class="mcode">C7</td><td>Guard cascade + WearableHelper</td><td>M5/M12</td><td><span class="p cl">Client</span></td><td>theo app</td><td><span class="p a">M</span></td><td><span class="p a">TB</span></td><td><span class="p s">P2</span></td></tr>
+          <tr><td class="mcode">B3</td><td>Soft rate-limit <code>429 + Retry-After</code></td><td>M9</td><td><span class="p be">Backend</span></td><td>—</td><td><span class="p a">M</span></td><td><span class="p a">TB</span></td><td><span class="p s">P2</span></td></tr>
+          <tr><td class="mcode">B4</td><td>Tách infra / pool</td><td>vạ lây</td><td><span class="p be">Backend</span></td><td>—</td><td><span class="p r">H</span></td><td><span class="p r">Cao</span></td><td><span class="p s">P2</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-faint);margin-top:9px">* Rất cao <b>nếu</b> runtime xác nhận <code>iqair.php</code> đã bỏ field <code>conc</code>.</p>
+  </div>
+</section>
+
+<!-- 9. LỘ TRÌNH -->
+<section id="lotrinh">
+  <div class="wrap read">
+    <div class="sec-eyebrow"><span class="num">09</span> Lộ trình, đo lường & rủi ro</div>
+    <h2 class="sec-title">Quick-win client trước, đòn bẩy backend sau</h2>
+    <p class="sec-intro">P0 chạy được <b>ngay, không chờ backend</b> — diệt amplifier là phần giảm tải airapi lớn nhất phía client.</p>
+
+    <div class="phases">
+      <div class="ph p0">
+        <div class="ph-head"><span class="ph-tag">P0</span><span class="ph-t">Quick wins — Client (cả 2 app)</span><span class="ph-when">không phụ thuộc backend</span></div>
+        <p><b>C1–C6</b>: diệt amplifier <code>owm.php</code> (gate cache + negative-cache + dedup + ngừng ghi rỗng) + retry backoff + chặn <code>callTimeout</code> vô hạn của WF3. <b>Kỳ vọng:</b> giảm mạnh volume <code>owm.php</code> và loại bỏ vòng lặp dương → hạ baseline airapi ở mọi thời điểm, kể cả lúc :00.</p>
+      </div>
+      <div class="ph p1">
+        <div class="ph-head"><span class="ph-tag">P1</span><span class="ph-t">Trigger + đòn bẩy backend</span><span class="ph-when">cần phối hợp / runtime</span></div>
+        <p><b>T1</b> (làm runtime check trước — có thể là cú lớn nhất), <b>B2</b> (ETag + edge cache), <b>B1</b> (tách log định danh nguồn :00). <b>Phải định danh cú :00 trước khi fix được nó</b> — fix tùy nguồn (app/version khác → jitter; job backend → rải lịch). Trong lúc đó, baseline đã hạ bởi P0 cũng kéo chiều cao đỉnh :00 xuống.</p>
+      </div>
+      <div class="ph p2">
+        <div class="ph-head"><span class="ph-tag">P2</span><span class="ph-t">Resilience cấu trúc + version</span></div>
+        <p><b>C7</b> (cascade/WearableHelper theo version), <b>B3</b> (rate-limit), <b>B4</b> (tách infra) — tinh chỉnh & giảm vạ lây sau khi đã chặn được đỉnh.</p>
+      </div>
+    </div>
+
+    <h3 style="font-family:var(--display);font-weight:700;font-size:18px;margin:32px 0 4px">Chỉ số đo trước/sau (định nghĩa “done”)</h3>
+    <div class="metrics">
+      <div class="metric"><div class="mt">Volume <code>owm.php</code></div><div class="mg">vs <code>iqair.php</code>. Mục tiêu: <b>giảm mạnh</b> sau P0.</div></div>
+      <div class="metric"><div class="mt">Peak RPS @ HH:00</div><div class="mg">airapi. Mục tiêu: <b>về gần baseline 2–4k</b>.</div></div>
+      <div class="metric"><div class="mt">Độ “nhọn” của đỉnh</div><div class="mg">RPS tại <code>:00</code> vs <code>:00±2′</code>. Mục tiêu: <b>phẳng hơn</b> (sau khi định danh & xử lý nguồn :00).</div></div>
+      <div class="metric"><div class="mt">ConnectTimeout @ :00</div><div class="mg">Mục tiêu: <b>≈ 0</b>.</div></div>
+      <div class="metric"><div class="mt">304 / cache-hit ratio</div><div class="mg">Sau B2. Mục tiêu: <b>cao</b>.</div></div>
+      <div class="metric"><div class="mt">Vạ lây host khác</div><div class="mg">p99 <code>wth365</code>/<code>thoitiet24h</code> @ :00. Mục tiêu: <b>không tăng</b>.</div></div>
+    </div>
+
+    <h3 style="font-family:var(--display);font-weight:700;font-size:18px;margin:32px 0 6px">Rủi ro & đánh đổi</h3>
+    <div class="tbl-scroll">
+      <table class="t" style="min-width:600px">
+        <thead><tr><th>Rủi ro / đánh đổi</th><th>Mức</th><th>Biện pháp</th></tr></thead>
+        <tbody>
+          <tr><td>Negative-cache che pollutant thật sự mới</td><td><span class="p a">TB</span></td><td>TTL hợp lý + vẫn refresh theo cache chính 30′</td></tr>
+          <tr><td>Hạ timeout fail user mạng yếu</td><td><span class="p a">TB</span></td><td>Ngưỡng cân bằng + fallback hiển thị AQI cũ</td></tr>
+          <tr><td><code>stale-while-revalidate</code> phục vụ data hơi cũ</td><td><span class="p g">Thấp</span></td><td>Chấp nhận (AQI theo giờ); cận trên jitter nhỏ</td></tr>
+          <tr><td>CDN chi phí + mã hoá cản HTTP cache</td><td><span class="p a">TB</span></td><td>Bắt đầu cache origin + ETag, đánh giá CDN sau</td></tr>
+          <tr><td>Fix <code>conc</code> phụ thuộc team API</td><td><span class="p a">TB</span></td><td>Fallback: nới completeness check phía client</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note key" style="margin-top:26px">
+      <span class="tag">Đề xuất bước kế tiếp</span>
+      Chốt <b>P0</b> cho team client làm ngay (không chờ ai) + gửi <b>1 phép đo runtime</b> (<code>iqair.php</code> còn field <code>conc</code>?) và <b>câu hỏi backend</b> (tách được log theo app/version? có job đẩy hằng giờ?). Hai câu trả lời này quyết định độ lớn của <b>T1</b> (trigger baseline) và <b>B1</b> (định danh nguồn :00).
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <p style="margin:0 0 8px"><b>Phân tích đối chiếu 2 app — tải airapi tại mốc giờ chẵn</b> · <code style="color:#F5A35A">airapi.tohapp.com</code></p>
+      <p class="foot-note" style="margin:0">Tổng hợp từ hai audit mã nguồn (WF3 · com.wftab.weather.forecast và WF1 · com.droidteam.weather, 2026-06-29). Tài liệu phân tích — chưa đề xuất giải pháp chi tiết.</p>
+    </div>
+    <div class="legend">
+      <span class="lg"><i style="background:#15803D"></i> Trùng · nguyên nhân chung</span>
+      <span class="lg"><i style="background:#B4530A"></i> WF3</span>
+      <span class="lg"><i style="background:#0C7489"></i> WF1</span>
+      <span class="lg"><i style="background:#BE123C"></i> Cần xác nhận runtime</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function scrollToId(id){ var el=document.getElementById(id); if(!el) return; el.scrollIntoView({behavior:reduce?'auto':'smooth',block:'start'}); }
+  document.querySelectorAll('a[href^="#"]').forEach(function(a){
+    a.addEventListener('click', function(e){ var id=a.getAttribute('href').slice(1); if(!id) return; e.preventDefault(); scrollToId(id); });
+  });
+  var links = Array.prototype.slice.call(document.querySelectorAll('.navlinks a'));
+  var map = {}; links.forEach(function(l){ var id=l.getAttribute('href').slice(1); var el=document.getElementById(id); if(el) map[id]=l; });
+  if('IntersectionObserver' in window){
+    var obs = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ var l=map[e.target.id]; if(!l) return; if(e.isIntersecting){ links.forEach(function(x){x.classList.remove('active');}); l.classList.add('active'); } });
+    }, {rootMargin:'-45% 0px -50% 0px', threshold:0});
+    Object.keys(map).forEach(function(id){ obs.observe(document.getElementById(id)); });
+  }
+})();
+</script>
+</body>
+</html>
