@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Báo cáo điều tra – airapi</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2d3148;
+    --text: #d4d8f0;
+    --muted: #8890b0;
+    --accent: #6c8fff;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --code-bg: #12141e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 0;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    opacity: 0.85;
+  }
+  header a:hover { opacity: 1; }
+  header .sep { color: var(--border); }
+  header .title { font-size: 14px; color: var(--muted); }
+  #nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .nav-chip {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.15s;
+    cursor: pointer;
+    background: transparent;
+  }
+  .nav-chip:hover, .nav-chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(108,143,255,0.08);
+  }
+  #content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+  #loading {
+    text-align: center;
+    padding: 80px 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  /* Markdown styles */
+  #md h1 { font-size: 1.7em; margin: 0 0 24px; padding-bottom: 12px; border-bottom: 1px solid var(--border); color: #fff; }
+  #md h2 { font-size: 1.2em; margin: 36px 0 12px; color: #c8ceee; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  #md h3 { font-size: 1.05em; margin: 24px 0 8px; color: var(--accent); }
+  #md h4 { font-size: 0.95em; margin: 16px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  #md p { margin: 0 0 14px; }
+  #md a { color: var(--accent); }
+  #md strong { color: #fff; }
+  #md em { color: var(--yellow); }
+  #md code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 0.88em;
+    color: #a8b4f8;
+  }
+  #md pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 16px 0;
+  }
+  #md pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #c8d3ff;
+    font-size: 0.85em;
+  }
+  #md blockquote {
+    border-left: 3px solid var(--accent);
+    padding: 8px 16px;
+    margin: 16px 0;
+    background: rgba(108,143,255,0.05);
+    border-radius: 0 6px 6px 0;
+    color: var(--muted);
+  }
+  #md blockquote strong { color: var(--yellow); }
+  #md ul, #md ol { padding-left: 24px; margin: 10px 0 14px; }
+  #md li { margin: 4px 0; }
+  #md hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+  #md table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.9em;
+  }
+  #md th {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    color: var(--muted);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  #md td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+  }
+  #md tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  /* Highlight ✅ ❌ */
+  #md td:first-child, #md td { }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="dashboard_v2.html">← Dashboard chính</a>
+  <span class="sep">|</span>
+  <span class="title">Báo cáo điều tra spike AQI</span>
+</header>
+
+<div id="nav">
+  <a class="nav-chip active" data-file="WF3_AIRAPI_SPIKE_INVESTIGATION__2026-06-29.md">
+    WF3 · com.wftab.weather.forecast
+  </a>
+  <a class="nav-chip" data-file="WF1_DieuTra_Spike_iqair_08-12-20h.md">
+    WF1 · com.droidteam.weather
+  </a>
+</div>
+
+<div id="content">
+  <div id="loading">Đang tải báo cáo…</div>
+  <div id="md" style="display:none"></div>
+</div>
+
+<script>
+const chips = document.querySelectorAll('.nav-chip');
+const mdEl = document.getElementById('md');
+const loadingEl = document.getElementById('loading');
+
+async function loadReport(file) {
+  mdEl.style.display = 'none';
+  loadingEl.style.display = 'block';
+  loadingEl.textContent = 'Đang tải báo cáo…';
+  try {
+    const res = await fetch(file);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    mdEl.innerHTML = marked.parse(text);
+    loadingEl.style.display = 'none';
+    mdEl.style.display = 'block';
+    window.scrollTo(0, 0);
+  } catch (e) {
+    loadingEl.textContent = 'Không tải được file: ' + e.message;
+  }
+}
+
+chips.forEach(chip => {
+  chip.addEventListener('click', () => {
+    chips.forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    loadReport(chip.dataset.file);
+  });
+});
+
+// Load file từ query param hoặc file đầu tiên
+const params = new URLSearchParams(location.search);
+const initFile = params.get('file') || chips[0].dataset.file;
+const initChip = [...chips].find(c => c.dataset.file === initFile) || chips[0];
+initChip.classList.add('active');
+chips.forEach(c => { if (c !== initChip) c.classList.remove('active'); });
+loadReport(initFile);
+</script>
+</body>
+</html>
