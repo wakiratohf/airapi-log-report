@@ -1,0 +1,1987 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>airapi.tohapp.com — Log Analysis Dashboard</title>
+<meta name="description" content="Phân tích 5 ngày Apache log của airapi.tohapp.com: xu hướng traffic, phân loại lỗi, và IP tấn công">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0f14;--s1:#141a22;--s2:#1c2432;--s3:#243045;--border:#2a3a52;
+  --text:#c9d4e0;--muted:#5a6a7e;--accent:#4a9eff;--danger:#ff4d5a;
+  --warn:#f0a830;--ok:#34c770;--purple:#a78bfa;
+  --mono:'Courier New',Consolas,monospace;--sans:system-ui,-apple-system,sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;min-height:100vh}
+.header{background:linear-gradient(135deg,#0d1a2e 0%,#0b1520 100%);border-bottom:1px solid var(--border);padding:18px 28px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+.header-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);flex-shrink:0;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.header-title{font-family:var(--mono);font-size:15px;color:var(--text);letter-spacing:.02em}
+.header-title span{color:var(--accent)}
+.header-meta{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right;line-height:1.7}
+.main{padding:24px 28px;max-width:1400px;margin:0 auto}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.stat-card{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:18px 20px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.stat-card.blue::before{background:var(--accent)}.stat-card.red::before{background:var(--danger)}
+.stat-card.amber::before{background:var(--warn)}.stat-card.purple::before{background:var(--purple)}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+.stat-value{font-family:var(--mono);font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.stat-value.blue{color:var(--accent)}.stat-value.red{color:var(--danger)}.stat-value.amber{color:var(--warn)}.stat-value.purple{color:var(--purple)}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono)}
+.panel{background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:20px}
+.panel-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.panel-title{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.panel-badge{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(74,158,255,.1);border:1px solid rgba(74,158,255,.2);border-radius:4px;padding:1px 7px}
+.panel-body{padding:20px}
+.chart-wrap{position:relative;width:100%;height:220px;cursor:crosshair}
+.chart-wrap svg{width:100%;height:100%}
+.chart-legend{display:flex;gap:20px;margin-top:12px;justify-content:flex-end}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.legend-dot{width:10px;height:3px;border-radius:2px}
+.chart-tooltip{position:absolute;background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;pointer-events:none;opacity:0;transition:opacity .1s;z-index:5;white-space:nowrap}
+.tt-ts{color:var(--muted);margin-bottom:4px}.tt-total{color:var(--accent)}.tt-err{color:var(--danger)}
+.bottom-row{display:grid;grid-template-columns:300px 1fr 1fr;gap:14px;margin-bottom:20px}
+.donut-wrap{display:flex;flex-direction:column;align-items:center;gap:16px;padding:10px 0}
+.donut-svg{overflow:visible}
+.donut-legend{width:100%;display:flex;flex-direction:column;gap:6px}
+.donut-legend-item{display:flex;align-items:center;gap:8px;font-size:12px}
+.donut-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.donut-code{font-family:var(--mono);font-weight:600;min-width:32px}
+.donut-count{margin-left:auto;font-family:var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.donut-pct{font-family:var(--mono);font-size:10px;color:var(--muted);min-width:36px;text-align:right}
+.ip-list{display:flex;flex-direction:column;gap:8px}
+.ip-row{display:flex;flex-direction:column;gap:3px}
+.ip-meta{display:flex;align-items:center;justify-content:space-between}
+.ip-addr{font-family:var(--mono);font-size:11px;color:var(--text)}
+.ip-count{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ip-bar-bg{height:4px;background:var(--s3);border-radius:2px;overflow:hidden}
+.ip-bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--danger),#ff7043);transition:width .3s ease}
+.ep-table{width:100%;border-collapse:collapse}
+.ep-table th{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:0 0 10px;text-align:left;border-bottom:1px solid var(--border);font-weight:600}
+.ep-table th:last-child{text-align:right}
+.ep-table td{padding:9px 0;border-bottom:1px solid rgba(42,58,82,.4);vertical-align:middle}
+.ep-table td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.ep-path{font-family:var(--mono);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.ep-path.attack{color:var(--danger)}.ep-path.api{color:var(--accent)}.ep-path.normal{color:var(--text)}
+.ep-tag{font-size:9px;text-transform:uppercase;letter-spacing:.06em;padding:2px 5px;border-radius:3px;font-weight:700;margin-top:2px;display:inline-block}
+.ep-tag.threat{background:rgba(255,77,90,.15);color:var(--danger);border:1px solid rgba(255,77,90,.3)}
+.ep-tag.api{background:rgba(74,158,255,.1);color:var(--accent);border:1px solid rgba(74,158,255,.2)}
+.ep-tag.root{background:rgba(240,168,48,.1);color:var(--warn);border:1px solid rgba(240,168,48,.2)}
+.ep-count{font-family:var(--mono);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums}
+.module-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(42,58,82,.4)}
+.module-row:last-child{border-bottom:none}
+.module-name{font-family:var(--mono);font-size:12px;min-width:180px}
+.module-bar-bg{flex:1;height:6px;background:var(--s3);border-radius:3px;overflow:hidden}
+.module-bar-fill{height:100%;border-radius:3px}
+.module-count{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:50px;text-align:right;font-variant-numeric:tabular-nums}
+.module-desc{font-size:11px;color:var(--muted);margin-top:2px}
+.ecode-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.ecode-item{background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:6px 12px;display:flex;align-items:center;gap:8px}
+.ecode-id{font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:700}
+.ecode-n{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.spike-label{font-family:var(--mono);font-size:10px;fill:var(--warn)}
+.spike-line{stroke:var(--warn);stroke-dasharray:3 3;stroke-width:1;opacity:.6}
+.alert-bar{background:rgba(255,77,90,.06);border:1px solid rgba(255,77,90,.25);border-radius:8px;padding:12px 18px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px}
+.alert-icon{font-size:16px;margin-top:1px;flex-shrink:0}
+.alert-text{font-size:12px;line-height:1.6;color:var(--text)}
+.alert-text strong{color:var(--danger)}
+.herd-banner{background:linear-gradient(135deg,rgba(240,168,48,.08) 0%,rgba(255,77,90,.06) 100%);border:1px solid rgba(240,168,48,.35);border-radius:8px;padding:16px 20px;margin-bottom:20px}
+.herd-banner-title{font-size:13px;font-weight:700;color:var(--warn);margin-bottom:6px;display:flex;align-items:center;gap:8px;letter-spacing:.02em}
+.herd-banner-body{font-size:12px;line-height:1.7;color:var(--text)}
+.herd-banner-body code{font-family:var(--mono);color:var(--accent);background:rgba(74,158,255,.1);padding:1px 5px;border-radius:3px}
+.herd-banner-body strong{color:var(--warn)}
+.herd-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.herd-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
+.min-chart-wrap{position:relative;width:100%}
+.min-bars{display:flex;align-items:flex-end;gap:1px;height:100px;padding:0 2px}
+.min-bar{flex:1;border-radius:1px 1px 0 0;position:relative;cursor:default;transition:opacity .15s}
+.min-bar:hover{opacity:.8}
+.min-bar.spike{background:var(--danger)}.min-bar.tail{background:#ff7c44}
+.min-bar.secondary{background:var(--warn)}.min-bar.normal{background:var(--s3)}
+.min-x-labels{display:flex;padding:0 2px;gap:1px}
+.min-x-label{flex:1;font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center}
+.min-annotation{font-size:10px;color:var(--muted);margin-top:6px;display:flex;gap:14px;flex-wrap:wrap}
+.min-ann-dot{display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:4px}
+.ua-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.ua-row{display:flex;align-items:center;gap:8px}
+.ua-label{font-family:var(--mono);font-size:11px;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ua-pct{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:38px;text-align:right;font-variant-numeric:tabular-nums}
+.ua-bar-bg{width:80px;flex-shrink:0;height:4px;background:var(--s3);border-radius:2px;overflow:hidden}
+.ua-bar-fill{height:100%;border-radius:2px}
+.cascade{display:flex;flex-direction:column;gap:0}
+.cascade-node{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;display:flex;align-items:center;gap:10px;position:relative}
+.cascade-node.root-cause{border-color:rgba(240,168,48,.5);background:rgba(240,168,48,.06)}
+.cascade-node.impact{border-color:rgba(255,77,90,.3);background:rgba(255,77,90,.04)}
+.cascade-node.downstream{border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.04)}
+.cascade-arrow{text-align:center;padding:3px 0;color:var(--muted);font-size:11px;line-height:1}
+.cascade-icon{font-size:16px;flex-shrink:0}
+.cascade-label{font-size:12px;font-weight:600}
+.cascade-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.cascade-tag{font-family:var(--mono);font-size:10px;margin-left:auto;padding:2px 7px;border-radius:4px;font-weight:700;flex-shrink:0}
+.tag-warn{background:rgba(240,168,48,.15);color:var(--warn);border:1px solid rgba(240,168,48,.3)}
+.tag-err{background:rgba(255,77,90,.15);color:var(--danger);border:1px solid rgba(255,77,90,.3)}
+.tag-info{background:rgba(74,158,255,.1);color:var(--accent);border:1px solid rgba(74,158,255,.2)}
+.fix-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.fix-card{background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:14px 16px}
+.fix-num{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px;letter-spacing:.06em}
+.fix-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px}
+.fix-code{font-family:var(--mono);font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px 10px;line-height:1.6;color:var(--ok);margin-bottom:8px;overflow-x:auto;white-space:pre}
+.fix-desc{font-size:11px;color:var(--muted);line-height:1.6}
+.fix-impact{font-size:10px;margin-top:6px;padding:4px 8px;border-radius:4px;font-weight:600}
+.fix-impact.high{background:rgba(52,199,112,.1);color:var(--ok);border:1px solid rgba(52,199,112,.2)}
+.fix-impact.med{background:rgba(74,158,255,.1);color:var(--accent);border:1px solid rgba(74,158,255,.2)}
+@media(max-width:1100px){
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .bottom-row{grid-template-columns:1fr;grid-template-rows:auto auto auto}
+  .herd-grid,.herd-grid-3{grid-template-columns:1fr}
+}
+/* ── INSIGHTS TAB ── */
+.ins-eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);font-weight:700;margin:6px 0 14px}
+.ins-eyebrow.warn{color:var(--warn)}.ins-eyebrow.danger{color:var(--danger)}
+.ins-note{font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px}
+.ins-note code{font-family:var(--mono);color:var(--accent)}
+.cmp-table{width:100%;border-collapse:collapse;font-size:12px}
+.cmp-table th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+.cmp-table td{padding:9px 12px;border-bottom:1px solid rgba(42,58,82,.4);vertical-align:top}
+.cmp-table td.dim{font-family:var(--mono);color:var(--muted);font-size:11px}
+.cmp-table td.mar{color:var(--muted)}.cmp-table td.jun{color:var(--text)}
+.cmp-table tr:last-child td{border-bottom:none}
+.geo-badge{font-family:var(--mono);font-size:10px;color:var(--warn);background:rgba(240,168,48,.1);border:1px solid rgba(240,168,48,.25);border-radius:4px;padding:2px 8px}
+
+/* ── SPIKE TRACING (Overview) ── */
+.spk-toggle{display:inline-flex;gap:4px;background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:3px;flex-wrap:wrap}
+.spk-toggle button{background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;padding:5px 11px;border-radius:4px;cursor:pointer;transition:background .15s,color .15s}
+.spk-toggle button:hover{color:var(--text)}
+.spk-toggle button.active{background:var(--accent);color:#0b0f14;font-weight:700}
+.spk-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.spk-legend-item{display:flex;align-items:center;gap:6px}
+.spk-swatch{width:11px;height:11px;border-radius:2px;flex-shrink:0}
+.spk-stack{display:flex;align-items:flex-end;gap:1px;height:120px;padding:0 2px;margin-top:4px}
+.spk-col{flex:1;display:flex;flex-direction:column-reverse;cursor:default}
+.spk-col:hover{opacity:.8}
+.spk-col .seg{width:100%}
+.spk-callout{background:linear-gradient(135deg,rgba(240,168,48,.08) 0%,rgba(255,77,90,.06) 100%);border:1px solid rgba(240,168,48,.3);border-radius:8px;padding:16px 18px;margin-bottom:20px}
+.spk-callout-title{font-size:13px;font-weight:700;color:var(--warn);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.spk-callout ul{margin:0;padding-left:18px;font-size:12px;line-height:1.85;color:var(--text)}
+.spk-callout li{margin-bottom:5px}
+.spk-callout code{font-family:var(--mono);color:var(--accent);background:rgba(74,158,255,.1);padding:1px 5px;border-radius:3px;font-size:11px}
+.spk-culprit-tag{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 7px;border-radius:4px;font-weight:700}
+/* ----- Giải phẫu spike 13:00 (PHẦN 3) ----- */
+.spk13-verdict{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
+.spk13-vcard{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.spk13-vcard.ok{border-color:rgba(52,199,112,.4);background:rgba(52,199,112,.05)}
+.spk13-vcard.warn{border-color:rgba(240,168,48,.4);background:rgba(240,168,48,.05)}
+.spk13-vcard.info{border-color:rgba(74,158,255,.4);background:rgba(74,158,255,.05)}
+.spk13-vhead{font-size:12px;font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:7px}
+.spk13-vcard.ok .spk13-vhead{color:var(--ok)}
+.spk13-vcard.warn .spk13-vhead{color:var(--warn)}
+.spk13-vcard.info .spk13-vhead{color:var(--accent)}
+.spk13-vcard ul{margin:0;padding-left:16px;font-size:11.5px;line-height:1.65;color:var(--text)}
+.spk13-vcard li{margin-bottom:5px}
+.spk13-vcard code{font-family:var(--mono);color:var(--accent);font-size:10.5px;background:rgba(74,158,255,.1);padding:0 4px;border-radius:3px}
+.spk13-kv{font-family:var(--mono);font-size:23px;font-weight:700;color:var(--text);line-height:1}
+.spk13-kv .u{font-size:13px;color:var(--muted);font-weight:400}
+.spk13-kl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:7px 0 6px}
+.spk13-kd{font-size:11px;color:var(--muted);line-height:1.5}
+.spk13-hist{display:flex;align-items:flex-end;height:150px;gap:8px;padding:0 4px;margin-top:6px}
+.spk13-hgrp{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:4px;height:100%}
+.spk13-hbar{width:20px;border-radius:2px 2px 0 0;min-height:1px;transition:opacity .15s}
+.spk13-hx{display:flex;gap:8px;padding:6px 4px 0}
+.spk13-hxl{flex:1;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.spk13-step{display:flex;gap:13px;padding:11px 0;border-bottom:1px solid rgba(42,58,82,.4)}
+.spk13-step:last-child{border-bottom:none}
+.spk13-snum{flex:none;width:24px;height:24px;border-radius:50%;background:rgba(74,158,255,.15);color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.spk13-stext{font-size:12px;line-height:1.6;color:var(--text)}
+.spk13-stext code{font-family:var(--mono);color:var(--accent);font-size:11px}
+@media(max-width:1100px){.spk13-verdict{grid-template-columns:1fr}}
+
+/* ── TAB NAV ── */
+
+.tab-nav{background:linear-gradient(135deg,#0d1a2e 0%,#0b1520 100%);border-bottom:1px solid var(--border);padding:0 28px;display:flex;gap:0;position:sticky;top:62px;z-index:9}
+.tab-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--mono);font-size:12px;padding:10px 20px;cursor:pointer;letter-spacing:.05em;transition:color .15s,border-color .15s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ── LOG VIEWER ── */
+.lv-subtabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.lv-stab{background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--muted);font-family:var(--mono);font-size:11px;padding:5px 12px;cursor:pointer;transition:all .15s}
+.lv-stab:hover{border-color:var(--accent);color:var(--accent)}
+.lv-stab.active{background:rgba(74,158,255,.1);border-color:var(--accent);color:var(--accent)}
+.lv-stab .badge{display:inline-block;margin-left:5px;font-size:10px;color:var(--muted)}
+.lv-stab.active .badge{color:var(--accent)}
+.lv-controls{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.lv-search{flex:1;min-width:180px;background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 12px;outline:none;transition:border-color .15s}
+.lv-search:focus{border-color:var(--accent)}
+.lv-search::placeholder{color:var(--muted)}
+.lv-select{background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:11px;padding:7px 10px;cursor:pointer;outline:none}
+.lv-progress{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:14px}
+.lv-progress-label{font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:8px}
+.lv-progress-list{display:flex;flex-direction:column;gap:5px}
+.lv-pf{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px}
+.lv-pf-name{width:210px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.lv-pf-bar-bg{flex:1;height:3px;background:var(--s3);border-radius:2px;overflow:hidden}
+.lv-pf-bar{height:100%;border-radius:2px;width:0%;transition:width .2s}
+.lv-pf-stat{width:90px;text-align:right;color:var(--muted)}
+.lv-pf-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.lv-dropzone{border:2px dashed var(--border);border-radius:10px;padding:48px 28px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;transition:all .2s;margin-bottom:16px;position:relative}
+.lv-dropzone:hover,.lv-dropzone.drag-over{border-color:var(--accent);background:rgba(74,158,255,.04);color:var(--text)}
+.lv-dropzone-icon{font-size:32px;margin-bottom:10px}
+.lv-dropzone-hint{font-size:11px;color:var(--muted);margin-top:8px;font-family:var(--mono);line-height:1.8}
+.lv-dropzone label{color:var(--accent);cursor:pointer;text-decoration:underline}
+.lv-dropzone input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
+.lv-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:6px;max-height:600px;overflow-y:auto}
+.lv-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.lv-table th{background:var(--s2);padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2}
+.lv-table td{padding:6px 10px;border-bottom:1px solid rgba(42,58,82,.3);vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-table tr:last-child td{border-bottom:none}
+.lv-table tr:hover td{background:rgba(74,158,255,.04)}
+.lv-table td.td-msg{max-width:400px;white-space:normal;word-break:break-word;line-height:1.4}
+.lv-row-err td:first-child{border-left:2px solid var(--danger)}
+.lv-row-warn td:first-child{border-left:2px solid var(--warn)}
+.lv-row-notice td:first-child{border-left:2px solid var(--s3)}
+.lv-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-weight:700;font-size:10px}
+.lv-s4xx{background:rgba(240,168,48,.15);color:var(--warn)}
+.lv-s5xx{background:rgba(255,77,90,.15);color:var(--danger)}
+.lv-s3xx{background:rgba(74,158,255,.1);color:var(--accent)}
+.lv-s2xx{background:rgba(52,199,112,.1);color:var(--ok)}
+.lv-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-size:11px;color:var(--muted);font-family:var(--mono);flex-wrap:wrap;gap:8px}
+.lv-btn{background:var(--s2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:5px;cursor:pointer;transition:all .15s}
+.lv-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.lv-btn.primary{background:rgba(74,158,255,.1);border-color:rgba(74,158,255,.4);color:var(--accent)}
+.lv-btn:disabled{opacity:.4;cursor:default}
+.lv-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px;border:1px solid var(--border);border-radius:6px}
+.lv-empty-icon{font-size:36px;margin-bottom:12px}
+.lv-warn-bar{background:rgba(240,168,48,.08);border:1px solid rgba(240,168,48,.3);border-radius:6px;padding:10px 16px;font-size:11px;color:var(--warn);margin-bottom:14px;display:flex;align-items:center;gap:8px;font-family:var(--mono)}
+.lv-stat-bar{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap}
+.lv-stat-chip{background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.lv-stat-chip span{color:var(--text)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-dot"></div>
+  <div class="header-title"><span>airapi.tohapp.com</span> — Apache Log Dashboard</div>
+  <div class="header-meta">
+    <div>24 Jun – 29 Jun 2026</div>
+    <div>5 ngày · 6 files · ~22M requests</div>
+  </div>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="overview">Overview</button>
+  <button class="tab-btn" data-tab="insights">Insights</button>
+  <button class="tab-btn" data-tab="logs">Raw Logs</button>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB: OVERVIEW (nội dung gốc) -->
+<!-- ============================================================ -->
+<div id="tab-overview" class="tab-panel">
+<div class="main">
+  <div id="alert-container"></div>
+  <div class="stat-grid">
+    <div class="stat-card blue"><div class="stat-label">Tổng requests</div><div class="stat-value blue" id="s-total">—</div><div class="stat-sub" id="s-rps">req/giờ trung bình</div></div>
+    <div class="stat-card red"><div class="stat-label">Lỗi 4xx / 5xx</div><div class="stat-value red" id="s-errors">—</div><div class="stat-sub" id="s-erate">tỷ lệ lỗi</div></div>
+    <div class="stat-card amber"><div class="stat-label">Giờ cao điểm lỗi</div><div class="stat-value amber" id="s-peak-val">—</div><div class="stat-sub" id="s-peak-ts">lúc</div></div>
+    <div class="stat-card purple"><div class="stat-label">IP gây lỗi nhiều nhất</div><div class="stat-value purple" style="font-size:14px;padding-top:6px" id="s-top-ip">—</div><div class="stat-sub" id="s-top-ip-count">lần lỗi</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Lưu lượng theo giờ</div><div class="panel-badge" id="chart-range"></div></div>
+    <div class="panel-body">
+      <div class="chart-wrap" id="chart-wrap">
+        <svg id="traffic-svg" viewBox="0 0 1000 200" preserveAspectRatio="none"></svg>
+        <div class="chart-tooltip" id="tooltip"><div class="tt-ts" id="tt-ts"></div><div class="tt-total" id="tt-total"></div><div class="tt-err" id="tt-err"></div></div>
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Tổng requests</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div>Lỗi 4xx/5xx (trục phải)</div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-row">
+    <div class="panel"><div class="panel-header"><div class="panel-title">HTTP Status Lỗi</div></div><div class="panel-body"><div class="donut-wrap"><svg class="donut-svg" id="donut-svg" width="140" height="140" viewBox="0 0 140 140"></svg><div class="donut-legend" id="donut-legend"></div></div></div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">Top IP gây lỗi</div></div><div class="panel-body"><div class="ip-list" id="ip-list"></div></div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">Endpoint lỗi nhiều nhất</div></div><div class="panel-body" style="overflow-x:auto"><table class="ep-table" id="ep-table"><thead><tr><th>Đường dẫn</th><th>Số lỗi</th></tr></thead><tbody id="ep-tbody"></tbody></table></div></div>
+  </div>
+  <div class="herd-banner">
+    <div class="herd-banner-title">&#9889; Thundering Herd — Hai tầng vấn đề (log + audit mã nguồn)</div>
+    <div class="herd-banner-body">
+      <strong>Tầng 1 — Amplifier phía client (đã xác nhận trong code):</strong>
+      Cả hai app WF3 và WF1 gọi <code>owm.php</code> vô điều kiện ngay cả khi cache <code>iqair.php</code> còn hạn, không có dedup, không có negative-cache, ghi đè field bằng chuỗi rỗng khi fail → vòng lặp dương. Đây là nguồn amplifier chính thổi phồng baseline airapi ở <em>mọi thời điểm</em>.
+      <br><br>
+      <strong>Tầng 2 — Spike :00 là thực tế nhưng nguồn chưa định danh:</strong>
+      Log 5 ngày xác nhận spike <strong>2.9×</strong> tại phút <code>:00</code> và spike phụ <strong>1.4×</strong> tại <code>:30–:31</code>. Spike là client-driven (100% Android), nhưng audit mã nguồn WF3 và WF1 xác nhận <em>không có anchor :00 trong 2 app này</em>. Nguồn thật của cú đồng bộ :00 <strong>cần tách log theo app/version để định danh trước khi fix được</strong>.
+    </div>
+  </div>
+  <div class="herd-grid">
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Requests theo phút trong giờ (tổng 5 ngày)</div><div class="panel-badge">60 phút / giờ</div></div>
+      <div class="panel-body">
+        <div class="min-chart-wrap"><div class="min-bars" id="min-bars"></div><div class="min-x-labels" id="min-labels"></div>
+        <div class="min-annotation">
+          <span><span class="min-ann-dot" style="background:var(--danger)"></span>:00 spike (2.9×)</span>
+          <span><span class="min-ann-dot" style="background:#ff7c44"></span>Tail decay :01–:09</span>
+          <span><span class="min-ann-dot" style="background:var(--warn)"></span>Spike phụ :30 (1.4×)</span>
+          <span><span class="min-ann-dot" style="background:var(--s3)"></span>Bình thường</span>
+        </div></div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="background:var(--s2);border-radius:6px;padding:10px 12px"><div class="stat-label">Baseline (phút 10–29)</div><div style="font-family:var(--mono);font-size:18px;color:var(--text);font-variant-numeric:tabular-nums">~312K</div><div style="font-size:11px;color:var(--muted)">req/phút trung bình</div></div>
+            <div style="background:rgba(240,168,48,.08);border:1px solid rgba(240,168,48,.2);border-radius:6px;padding:10px 12px"><div class="stat-label" style="color:var(--warn)">Phút :00 đỉnh</div><div style="font-family:var(--mono);font-size:18px;color:var(--warn);font-variant-numeric:tabular-nums">903K</div><div style="font-size:11px;color:var(--muted)">2.9× baseline — gộp 5 ngày</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Phân bố User-Agent (5 ngày)</div><div class="panel-badge" id="ua-total-badge">—</div></div>
+      <div class="panel-body">
+        <div style="display:flex;gap:20px;align-items:flex-start">
+          <svg id="ua-donut" width="110" height="110" viewBox="0 0 110 110" style="flex-shrink:0;overflow:visible"></svg>
+          <div class="ua-list" id="ua-list" style="flex:1;min-width:0"></div>
+        </div>
+        <div style="margin-top:14px;padding:10px 12px;background:rgba(255,77,90,.06);border:1px solid rgba(255,77,90,.2);border-radius:6px;font-size:11px;line-height:1.6;color:var(--text)">
+          <strong style="color:var(--danger)">~82.6%</strong> traffic đến từ <span style="font-family:var(--mono);color:var(--accent)">okhttp/5.0.0-alpha.4</span> — chứng tỏ đây là app nội bộ. Audit mã nguồn WF3 và WF1 xác nhận không có anchor giây <code style="font-family:var(--mono);color:var(--ok)">:00</code> trong 2 app này.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="herd-grid">
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Chuỗi ảnh hưởng (Impact Cascade)</div></div>
+      <div class="panel-body">
+        <div class="cascade">
+          <div class="cascade-node root-cause"><div class="cascade-icon">📱</div><div><div class="cascade-label" style="color:var(--warn)">Client Amplifier — owm.php né cache</div><div class="cascade-sub">~16.5M req/5ngày · okhttp/5.0.0-alpha.4 · không dedup, vòng lặp dương</div></div><span class="cascade-tag tag-warn">AMPLIFIER</span></div>
+          <div class="cascade-arrow">▼ mỗi read AQI → owm.php bắn song song, không dừng khi fail</div>
+          <div class="cascade-node root-cause" style="border-color:rgba(255,77,90,.35);background:rgba(255,77,90,.06)"><div class="cascade-icon">❓</div><div><div class="cascade-label" style="color:var(--danger)">Nguồn đồng bộ :00 — chưa định danh</div><div class="cascade-sub">Spike 2.9× tại :00 · client-driven (Android) · nhưng WF3+WF1 không có anchor :00 trong code</div></div><span class="cascade-tag tag-err">UNKNOWN SRC</span></div>
+          <div class="cascade-arrow">▼ burst đồng thời + amplifier owm.php cộng hưởng</div>
+          <div class="cascade-node impact"><div class="cascade-icon">⚡</div><div><div class="cascade-label" style="color:var(--danger)">airapi.tohapp.com — Thundering Herd</div><div class="cascade-sub">2.9× traffic trong 60s · Apache prefork worker pool cạn · queue backlog</div></div><span class="cascade-tag tag-err">OVERLOAD</span></div>
+          <div class="cascade-arrow">▼ worker cạn → request queue đầy</div>
+          <div class="cascade-node impact"><div class="cascade-icon">⏱</div><div><div class="cascade-label" style="color:var(--danger)">ConnectTimeout / 408 Request Timeout</div><div class="cascade-sub">332 lần timeout ghi nhận · thực tế cao hơn do client retry</div></div><span class="cascade-tag tag-err">408 × 332</span></div>
+          <div class="cascade-arrow">▼ airapi chậm → downstream timeout</div>
+          <div class="cascade-node downstream"><div class="cascade-icon">🌐</div><div><div class="cascade-label" style="color:var(--purple)">wth365 · thoitiet24h · services khác</div><div class="cascade-sub">Gọi airapi để lấy dữ liệu chất lượng không khí · timeout theo dây chuyền</div></div><span class="cascade-tag" style="background:rgba(167,139,250,.15);color:var(--purple);border:1px solid rgba(167,139,250,.3)">DOWNSTREAM</span></div>
+          <div class="cascade-arrow">▼ user thấy app bị chậm / trắng màn hình</div>
+          <div class="cascade-node downstream" style="border-color:rgba(90,106,126,.3)"><div class="cascade-icon">👤</div><div><div class="cascade-label" style="color:var(--muted)">End User Experience</div><div class="cascade-sub">Dữ liệu không tải được lúc đầu giờ · chỉ xảy ra ~30-60 giây · lặp mỗi giờ</div></div><span class="cascade-tag" style="background:var(--s3);color:var(--muted);border-color:var(--border)">SYMPTOM</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ============================================================ -->
+  <!-- TRUY VẾT SPIKE — traffic tăng đột biến do đâu? -->
+  <!-- ============================================================ -->
+  <div class="ins-eyebrow warn" style="margin-top:28px">🔍 Truy vết Spike — Traffic tăng đột biến do đâu?</div>
+  <div id="spk-callout"></div>
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Lưu lượng theo giờ — phân rã theo thành phần</div>
+      <div class="spk-toggle" id="spk-toggle">
+        <button data-dim="ep" class="active">Endpoint</button>
+        <button data-dim="plat">Nền tảng</button>
+        <button data-dim="bot">Bot vs Người dùng</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="chart-wrap" id="spk-wrap">
+        <svg id="spk-svg" viewBox="0 0 1000 220" preserveAspectRatio="none"></svg>
+        <div class="chart-tooltip" id="spk-tip" style="white-space:normal;min-width:170px;line-height:1.55"></div>
+      </div>
+      <div class="spk-legend" id="spk-legend"></div>
+      <div class="ins-note">Các lớp màu xếp chồng = thành phần tạo nên tổng lưu lượng mỗi giờ. Lớp nào <strong>phình to đúng lúc spike</strong> chính là nguyên nhân. Rê chuột để xem chi tiết từng giờ; bấm nút trên để đổi chiều phân rã.</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Bảng phân rã spike tự động</div><div class="panel-badge" id="spk-tbl-badge"></div></div>
+    <div class="panel-body" style="overflow-x:auto">
+      <table class="cmp-table" id="spk-table"><thead><tr><th>Thời điểm (UTC)</th><th>Tổng req</th><th>So baseline</th><th>Thủ phạm chính (phần dư)</th><th>IP mới/giờ</th></tr></thead><tbody id="spk-tbody"></tbody></table>
+      <div class="ins-note">Baseline = trung vị giờ (<span id="spk-median">—</span> req/giờ). "Thủ phạm" = endpoint đóng góp nhiều nhất vào phần vượt baseline. Dấu <span style="color:var(--purple)">▲</span> = số IP lần đầu xuất hiện cao bất thường (&gt;2× nền).</div>
+    </div>
+  </div>
+  <div class="herd-grid">
+    <div class="panel"><div class="panel-header"><div class="panel-title">Phân rã herd :00 theo endpoint</div><div class="panel-badge">60 phút/giờ</div></div>
+      <div class="panel-body"><div class="spk-stack" id="spk-min-ep"></div><div class="min-x-labels" id="spk-min-ep-lbl"></div><div class="spk-legend" id="spk-min-ep-leg"></div>
+      <div class="ins-note">Cột đầu giờ (<code style="color:var(--danger)">:00</code>) cao gấp ~3× — phần phình chủ yếu là <code>iqair.php</code> + <code>owm.php</code>.</div></div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">Phân rã herd :00 theo nền tảng</div><div class="panel-badge">60 phút/giờ</div></div>
+      <div class="panel-body"><div class="spk-stack" id="spk-min-plat"></div><div class="min-x-labels" id="spk-min-plat-lbl"></div><div class="spk-legend" id="spk-min-plat-leg"></div>
+      <div class="ins-note">Phần phình :00 gần như 100% là <code>Android</code>. Lớp <code style="color:var(--danger)">Bot/Server</code> gần như <strong>phẳng</strong> ở mọi phút → bot KHÔNG gây herd.</div></div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">IP lần đầu xuất hiện theo giờ</div><div class="panel-badge">phát hiện đợt thiết bị mới / chiến dịch</div></div>
+    <div class="panel-body">
+      <div class="chart-wrap" id="spk-ip-wrap" style="height:160px">
+        <svg id="spk-ip-svg" viewBox="0 0 1000 160" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="spk-legend" id="spk-ip-legend"></div>
+      <div class="ins-note" id="spk-ip-note"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- GIẢI PHẪU SPIKE 13:00 — do app Android hay do backend? -->
+  <!-- ============================================================ -->
+  <div class="ins-eyebrow" style="margin-top:28px">🔬 Giải phẫu spike 13:00 — do app Android hay do backend?</div>
+
+  <div class="spk13-verdict">
+    <div class="spk13-vcard ok">
+      <div class="spk13-vhead">✅ Log ĐÃ chốt được</div>
+      <ul>
+        <li>Là <strong>~<code>90.312</code> thiết bị thật</strong>, mỗi máy chỉ ~<code>2,7</code> request → <strong>KHÔNG</strong> phải cron của backend tự gọi (cron sẽ là vài IP gọi hàng nghìn lần).</li>
+        <li>Backend <strong>khỏe</strong> lúc spike: lỗi <code>0,01%</code> y như giờ thường → không quá tải.</li>
+        <li>Trải đều <strong>toàn dàn Android</strong> (okhttp/5.0 chiếm <code>98,6%</code> ở cả 2 giờ) → không phải 1 bản app lỗi riêng.</li>
+        <li>Là <strong>sóng đánh thức đồng bộ</strong> máy đang "ngủ": <code>62%</code> IP cả ngày mới xuất hiện đúng 13:00.</li>
+      </ul>
+    </div>
+    <div class="spk13-vcard warn">
+      <div class="spk13-vhead">❓ Log KHÔNG chốt được</div>
+      <ul>
+        <li><strong>Push do backend</strong> hay <strong>lịch chạy ngầm trong app</strong>? Hai nguyên nhân để lại dấu vết log <strong>gần như giống hệt</strong>.</li>
+        <li>Push là tin server→máy, <strong>không nằm trong log API</strong> — chỉ thấy hệ quả (máy gọi API sau đó).</li>
+        <li>Query đã <strong>mã hóa</strong> (<code>param=&lt;base64+gzip&gt;</code>) → không đọc được dấu <code>src=push</code>/campaign.</li>
+        <li>Nhịp theo giây rải đều cả phút (không dồn đúng giây :00) → hợp với <strong>cả hai</strong>: app jitter HOẶC push giao rải.</li>
+      </ul>
+    </div>
+    <div class="spk13-vcard info">
+      <div class="spk13-vhead">🎯 Định hướng</div>
+      <ul>
+        <li>Việc cần làm <strong>không phụ thuộc</strong> việc phân định: dù push hay lịch app, đây đều là <strong>đánh thức đồng bộ</strong> cả dàn máy.</li>
+        <li>Giảm tải hiệu quả ngay: <strong>cache phía server</strong> cho <code>iqair.php</code> + <strong>rải ngẫu nhiên</strong> thời điểm gọi (jitter) — đúng cho cả hai nguyên nhân.</li>
+        <li>Muốn quy đúng đội (backend hay Android), xem checklist cuối mục.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card purple">
+      <div class="spk13-kv">62%<span class="u"> IP mới</span></div>
+      <div class="spk13-kl">Thiết bị "ngủ" được đánh thức</div>
+      <div class="spk13-kd">62% IP hoạt động lúc 13:00 là lần đầu xuất hiện trong ngày (nền ~37%) → một đợt thiết bị mới ồ ạt.</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="spk13-kv">38%<span class="u"> gọi 1 lần</span></div>
+      <div class="spk13-kl">Đánh thức → gọi rồi dừng</div>
+      <div class="spk13-kd">38% IP chỉ gửi đúng 1 request (nền 18%). Trung bình 2,7 req/IP so với nền 3,7 → ít polling hơn, không phải retry dai.</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="spk13-kv">0,01%<span class="u"> lỗi</span></div>
+      <div class="spk13-kl">Backend khỏe khi spike</div>
+      <div class="spk13-kd">Tỷ lệ lỗi lúc 13:00 bằng giờ thường → vấn đề là đỉnh tải/chi phí, KHÔNG phải backend đang hỏng.</div>
+    </div>
+    <div class="stat-card">
+      <div class="spk13-kv">98,6%<span class="u"> okhttp</span></div>
+      <div class="spk13-kl">Đồng đều cả dàn máy</div>
+      <div class="spk13-kd">Một bản okhttp chiếm 98,6% Android ở cả giờ spike lẫn giờ nền → không phải 1 bản app lỗi riêng lẻ.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Nhịp trong giờ 13:00 vs giờ nền — phần dư dồn ~10 phút đầu</div><div class="panel-badge">ngày 26/06 · theo phút</div></div>
+    <div class="panel-body">
+      <div class="chart-wrap" id="spk13-wrap" style="height:200px">
+        <svg id="spk13-svg" viewBox="0 0 1000 200" preserveAspectRatio="none"></svg>
+        <div class="chart-tooltip" id="spk13-tip"></div>
+      </div>
+      <div class="spk-legend" id="spk13-legend"></div>
+      <div class="ins-note">So với giờ nền (14:00), giờ spike chỉ vượt rõ trong <strong>~10–12 phút đầu</strong> rồi hội tụ về nền → một <strong>cú đánh thức</strong> đầu giờ, không phải lưu lượng tăng đều cả giờ (loại trừ "người dùng mở app rải rác cả tiếng").</div>
+    </div>
+  </div>
+
+  <div class="herd-grid">
+    <div class="panel"><div class="panel-header"><div class="panel-title">Số request mỗi IP — giờ spike vs nền</div><div class="panel-badge">% trên số IP</div></div>
+      <div class="panel-body">
+        <div class="spk13-hist" id="spk13-hist"></div>
+        <div class="spk13-hx" id="spk13-histx"></div>
+        <div class="spk-legend" id="spk13-hist-leg"></div>
+        <div class="ins-note">Giờ 13:00, cột <strong>"1 request" vọt lên 38%</strong> (nền 18%) → rất nhiều máy được đánh thức, gọi đúng <strong>1 lần</strong> rồi dừng. Vân tay của <strong>đánh thức đồng bộ</strong>, không phải polling dai (polling = ít IP gọi nhiều lần).</div>
+      </div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">Nhịp theo từng giây — phút 13:00:00</div><div class="panel-badge">60 giây</div></div>
+      <div class="panel-body">
+        <div class="min-bars" id="spk13-sec"></div>
+        <div class="min-x-labels" id="spk13-sec-lbl"></div>
+        <div class="ins-note">Trong phút đầu giờ, request <strong>rải đều cả 60 giây</strong>, giây <code style="color:var(--danger)">:00</code> KHÔNG phải đỉnh → <strong>loại trừ</strong> "kích hoạt tức thời đúng 13:00:00". Nhưng nhịp rải này hợp với <strong>cả</strong> app-hẹn-giờ-có-jitter lẫn push-giao-rải → vẫn không tự phân định được.</div>
+      </div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">🔑 Cách chốt dứt khoát "push hay app" (cần dữ liệu ngoài log)</div></div>
+    <div class="panel-body">
+      <div class="spk13-step"><div class="spk13-snum">1</div><div class="spk13-stext"><strong>Đối chiếu log gửi push của backend.</strong> Có chiến dịch push/thông báo nào gửi quanh <code>13:00 UTC</code> (≈ 20:00 giờ VN) mỗi ngày không? Nếu khớp mốc → nguyên nhân là <strong>backend (push)</strong>.</div></div>
+      <div class="spk13-step"><div class="spk13-snum">2</div><div class="spk13-stext"><strong>Kiểm lịch chạy ngầm trong app Android.</strong> Xem có <code>WorkManager</code>/<code>AlarmManager</code> hay job đặt lịch gọi <code>iqair.php</code> quanh 13:00 không. Nếu có → nguyên nhân là <strong>app (lịch cứng)</strong>; sửa = thêm jitter (rải giờ ngẫu nhiên).</div></div>
+      <div class="spk13-step"><div class="spk13-snum">3</div><div class="spk13-stext"><strong>Giải mã tham số <code>param</code>.</strong> Query đang là <code>base64+gzip</code>; nếu đội backend giải mã được, đọc trực tiếp tham số sẽ biết request đến từ luồng nào.</div></div>
+      <div class="spk13-step"><div class="spk13-snum">4</div><div class="spk13-stext"><strong>Thêm dấu hiệu đọc-được cho log tương lai.</strong> Gắn <code>?src=push</code> vs <code>?src=schedule</code> hoặc header <code>X-Trigger</code> khi gọi API → các spike sau sẽ <strong>tự giải thích</strong>, không cần suy đoán.</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Apache Error Log — Phân loại lỗi</div><div class="panel-badge" id="total-err-log">— entries</div></div>
+    <div class="panel-body">
+      <div id="module-list"></div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;font-weight:600">Mã lỗi Apache (AH#####)</div>
+        <div class="ecode-grid" id="ecode-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB: RAW LOGS -->
+<!-- ============================================================ -->
+<div id="tab-logs" class="tab-panel" style="display:none">
+<div class="main">
+  <div id="lv-root">
+    <!-- nội dung render bằng JS -->
+  </div>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB: INSIGHTS (phân tích mở rộng từ log) -->
+<!-- ============================================================ -->
+<div id="tab-insights" class="tab-panel" style="display:none">
+<div class="main">
+
+  <!-- KPI strip -->
+  <div class="stat-grid">
+    <div class="stat-card blue"><div class="stat-label">Tổng băng thông (5 ngày)</div><div class="stat-value blue" id="i-bw">—</div><div class="stat-sub" id="i-bw-sub"></div></div>
+    <div class="stat-card purple"><div class="stat-label">IP / thiết bị duy nhất</div><div class="stat-value purple" id="i-ips">—</div><div class="stat-sub" id="i-ips-sub"></div></div>
+    <div class="stat-card amber"><div class="stat-label">Traffic không mã hóa (HTTP)</div><div class="stat-value amber" id="i-http">—</div><div class="stat-sub" id="i-http-sub"></div></div>
+    <div class="stat-card red"><div class="stat-label">Bot lớn nhất (1 IP)</div><div class="stat-value red" style="font-size:15px;padding-top:6px" id="i-bot">—</div><div class="stat-sub" id="i-bot-sub"></div></div>
+  </div>
+
+  <!-- A. Cơ cấu endpoint -->
+  <div class="ins-eyebrow">A · Cơ cấu 3 endpoint API</div>
+  <div class="herd-grid">
+    <div class="panel"><div class="panel-header"><div class="panel-title">Tỷ trọng request theo endpoint</div></div>
+      <div class="panel-body"><div class="donut-wrap"><svg class="donut-svg" id="i-ep-donut" width="140" height="140" viewBox="0 0 140 140"></svg><div class="donut-legend" id="i-ep-legend"></div></div></div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">owm.php — lượt gọi theo giờ (né cache → baseline cao)</div><div class="panel-badge" id="i-owm-badge"></div></div>
+      <div class="panel-body"><div class="chart-wrap" style="height:180px"><svg id="i-owm-svg" viewBox="0 0 1000 180" preserveAspectRatio="none"></svg></div>
+      <div class="ins-note">owm.php chiếm ~31% request nhưng phản hồi chỉ <code>~555 B</code> (so với iqair <code>~6.954 B</code>). Lượt gọi gần như <strong>không đổi mọi giờ</strong> → dấu hiệu gọi vô điều kiện, đúng với kết luận audit mã nguồn.</div></div></div>
+  </div>
+  <div class="panel"><div class="panel-header"><div class="panel-title">Endpoint × kích thước phản hồi × băng thông</div></div>
+    <div class="panel-body" style="overflow-x:auto"><table class="ep-table"><thead><tr><th>Endpoint</th><th>Số request</th><th>Avg phản hồi</th><th>Tổng băng thông</th></tr></thead><tbody id="i-ep-tbody"></tbody></table></div></div>
+
+  <!-- B. Hệ sinh thái client -->
+  <div class="ins-eyebrow">B · Hệ sinh thái client (nền tảng · app · OS · thiết bị)</div>
+  <div id="i-bot-alert"></div>
+  <div class="herd-grid">
+    <div class="panel"><div class="panel-header"><div class="panel-title">Nền tảng</div></div>
+      <div class="panel-body"><div class="donut-wrap"><svg class="donut-svg" id="i-plat-donut" width="140" height="140" viewBox="0 0 140 140"></svg><div class="donut-legend" id="i-plat-legend"></div></div></div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">App / thư viện client</div></div>
+      <div class="panel-body"><div class="ua-list" id="i-app-list"></div></div></div>
+  </div>
+  <div class="herd-grid">
+    <div class="panel"><div class="panel-header"><div class="panel-title">Phiên bản hệ điều hành</div></div>
+      <div class="panel-body"><div class="ua-list" id="i-os-list"></div></div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">Dòng máy phổ biến</div><div class="panel-badge">từ UA Dalvik/WebView</div></div>
+      <div class="panel-body"><div class="ua-list" id="i-dev-list"></div></div></div>
+  </div>
+
+  <!-- C+D. Chất lượng & băng thông + giao thức -->
+  <div class="ins-eyebrow">C · Chất lượng phản hồi · giao thức · băng thông</div>
+  <div class="herd-grid">
+    <div class="panel"><div class="panel-header"><div class="panel-title">Phân bố kích thước phản hồi</div></div>
+      <div class="panel-body"><div class="min-chart-wrap"><div class="min-bars" id="i-size-bars" style="height:120px"></div><div class="min-x-labels" id="i-size-labels"></div></div>
+      <div class="ins-note" id="i-size-note"></div></div></div>
+    <div class="panel"><div class="panel-header"><div class="panel-title">HTTP (80) vs HTTPS (443)</div></div>
+      <div class="panel-body"><div class="donut-wrap"><svg class="donut-svg" id="i-proto-donut" width="140" height="140" viewBox="0 0 140 140"></svg><div class="donut-legend" id="i-proto-legend"></div></div>
+      <div class="ins-note" id="i-proto-note"></div></div></div>
+  </div>
+
+  <!-- E. Top IP theo lưu lượng -->
+  <div class="ins-eyebrow">D · Top IP theo lưu lượng (không phải theo lỗi)</div>
+  <div class="panel"><div class="panel-header"><div class="panel-title">15 IP gọi nhiều nhất</div></div>
+    <div class="panel-body" style="overflow-x:auto"><table class="ep-table"><thead><tr><th>Địa chỉ IP</th><th>Số request</th></tr></thead><tbody id="i-ip-tbody"></tbody></table>
+    <div class="ins-note">Cụm <code>92.184.103.x</code> (Pháp) xuất hiện 5 IP cùng dải /24 trong top 15 — nhiều khả năng một tích hợp/NAT gọi nặng. <code>::1</code> là kết nối nội bộ Apache.</div></div></div>
+
+  <!-- F. Bề mặt tấn công -->
+  <div class="ins-eyebrow danger">E · Bề mặt tấn công &amp; scanner</div>
+  <div id="i-attack-alert"></div>
+  <div class="panel"><div class="panel-header"><div class="panel-title">Phân loại lượt dò quét (từ access log)</div></div>
+    <div class="panel-body"><div id="i-attack-list"></div>
+    <div class="ins-note">Ngoài ra error log ghi nhận <strong>30 lượt</strong> path traversal qua <code>/cgi-bin/.%e/</code> (bị chặn ở tầng URI) và <strong>1.205 lượt</strong> autoindex dò thư mục gốc — xem tab Overview.</div></div></div>
+
+  <!-- Geo -->
+  <div class="ins-eyebrow">F · Phân bố địa lý (ước lượng)</div>
+  <div class="panel"><div class="panel-header"><div class="panel-title">Lưu lượng theo vùng RIR</div><div class="geo-badge">ước lượng thô · đã loại bot &amp; nội bộ</div></div>
+    <div class="panel-body"><div class="ua-list" id="i-geo-list"></div>
+    <div class="ins-note">Suy ra từ dải IP theo tổ chức cấp phát khu vực (RIR), <strong>không phải GeoIP cấp quốc gia</strong>. Đã loại IP bot DigitalOcean và kết nối nội bộ. Cho thấy tệp người dùng trải khắp 5 châu lục.</div></div></div>
+
+  <!-- So sánh Mar vs Jun -->
+  <div class="ins-eyebrow">G · Tiến hóa: Tháng 3/2025 → Tháng 6/2026</div>
+  <div class="panel"><div class="panel-header"><div class="panel-title">Đối chiếu hai mốc thời gian</div></div>
+    <div class="panel-body" style="overflow-x:auto"><table class="cmp-table"><thead><tr><th>Chiều</th><th>Mar 2025 (~21 giờ)</th><th>Jun 2026 (5 ngày)</th></tr></thead><tbody id="i-cmp-tbody"></tbody></table>
+    <div class="ins-note"><strong>Phát hiện cốt lõi:</strong> tháng 3/2025 chỉ có <em>một</em> endpoint <code>iqair</code> và <em>100% Android</em>. Cơ chế amplifier <code>owm.php</code>, các app iOS, và con bot Go-http-client đều <strong>xuất hiện SAU</strong> mốc đó — phù hợp với việc baseline tải tăng mạnh.</div></div></div>
+
+</div>
+</div>
+
+<script>
+// ============================================================
+// DATA (giữ nguyên từ dashboard gốc)
+// ============================================================
+const hourlyData = [
+  {"ts":"2026-06-24 06:00","total":91518,"errors":36},{"ts":"2026-06-24 07:00","total":162226,"errors":162},
+  {"ts":"2026-06-24 08:00","total":166618,"errors":98},{"ts":"2026-06-24 09:00","total":173168,"errors":10},
+  {"ts":"2026-06-24 10:00","total":173394,"errors":12},{"ts":"2026-06-24 11:00","total":174552,"errors":9},
+  {"ts":"2026-06-24 12:00","total":172617,"errors":10},{"ts":"2026-06-24 13:00","total":244903,"errors":17},
+  {"ts":"2026-06-24 14:00","total":191047,"errors":15},{"ts":"2026-06-24 15:00","total":179448,"errors":9},
+  {"ts":"2026-06-24 16:00","total":180757,"errors":11},{"ts":"2026-06-24 17:00","total":170375,"errors":16},
+  {"ts":"2026-06-24 18:00","total":175451,"errors":15},{"ts":"2026-06-24 19:00","total":157802,"errors":47},
+  {"ts":"2026-06-24 20:00","total":151935,"errors":20},{"ts":"2026-06-24 21:00","total":144041,"errors":16},
+  {"ts":"2026-06-24 22:00","total":136402,"errors":35},{"ts":"2026-06-24 23:00","total":139848,"errors":19},
+  {"ts":"2026-06-25 00:00","total":147371,"errors":20},{"ts":"2026-06-25 01:00","total":184043,"errors":47},
+  {"ts":"2026-06-25 02:00","total":145697,"errors":26},{"ts":"2026-06-25 03:00","total":154314,"errors":16},
+  {"ts":"2026-06-25 04:00","total":155809,"errors":39},{"ts":"2026-06-25 05:00","total":193651,"errors":24},
+  {"ts":"2026-06-25 06:00","total":181353,"errors":10},{"ts":"2026-06-25 07:00","total":168267,"errors":9},
+  {"ts":"2026-06-25 08:00","total":173354,"errors":424},{"ts":"2026-06-25 09:00","total":176805,"errors":17},
+  {"ts":"2026-06-25 10:00","total":183093,"errors":8},{"ts":"2026-06-25 11:00","total":177342,"errors":11},
+  {"ts":"2026-06-25 12:00","total":177771,"errors":9},{"ts":"2026-06-25 13:00","total":246103,"errors":14},
+  {"ts":"2026-06-25 14:00","total":187702,"errors":12},{"ts":"2026-06-25 15:00","total":177424,"errors":12},
+  {"ts":"2026-06-25 16:00","total":183873,"errors":31},{"ts":"2026-06-25 17:00","total":174945,"errors":57},
+  {"ts":"2026-06-25 18:00","total":177083,"errors":54},{"ts":"2026-06-25 19:00","total":160983,"errors":59},
+  {"ts":"2026-06-25 20:00","total":156545,"errors":67},{"ts":"2026-06-25 21:00","total":150989,"errors":58},
+  {"ts":"2026-06-25 22:00","total":141524,"errors":8},{"ts":"2026-06-25 23:00","total":144665,"errors":21},
+  {"ts":"2026-06-26 00:00","total":150930,"errors":34},{"ts":"2026-06-26 01:00","total":186529,"errors":32},
+  {"ts":"2026-06-26 02:00","total":150002,"errors":59},{"ts":"2026-06-26 03:00","total":153285,"errors":27},
+  {"ts":"2026-06-26 04:00","total":157778,"errors":25},{"ts":"2026-06-26 05:00","total":197097,"errors":16},
+  {"ts":"2026-06-26 06:00","total":175888,"errors":18},{"ts":"2026-06-26 07:00","total":158442,"errors":17},
+  {"ts":"2026-06-26 08:00","total":165513,"errors":22},{"ts":"2026-06-26 09:00","total":173627,"errors":11},
+  {"ts":"2026-06-26 10:00","total":173786,"errors":39},{"ts":"2026-06-26 11:00","total":172693,"errors":8},
+  {"ts":"2026-06-26 12:00","total":171392,"errors":24},{"ts":"2026-06-26 13:00","total":241310,"errors":54},
+  {"ts":"2026-06-26 14:00","total":187524,"errors":5},{"ts":"2026-06-26 15:00","total":175664,"errors":11},
+  {"ts":"2026-06-26 16:00","total":178908,"errors":5},{"ts":"2026-06-26 17:00","total":170240,"errors":7},
+  {"ts":"2026-06-26 18:00","total":174686,"errors":18},{"ts":"2026-06-26 19:00","total":156453,"errors":16},
+  {"ts":"2026-06-26 20:00","total":151483,"errors":16},{"ts":"2026-06-26 21:00","total":142455,"errors":29},
+  {"ts":"2026-06-26 22:00","total":136485,"errors":17},{"ts":"2026-06-26 23:00","total":137768,"errors":21},
+  {"ts":"2026-06-27 00:00","total":144550,"errors":12},{"ts":"2026-06-27 01:00","total":179159,"errors":18},
+  {"ts":"2026-06-27 02:00","total":147002,"errors":52},{"ts":"2026-06-27 03:00","total":150209,"errors":34},
+  {"ts":"2026-06-27 04:00","total":154114,"errors":13},{"ts":"2026-06-27 05:00","total":197528,"errors":18},
+  {"ts":"2026-06-27 06:00","total":181910,"errors":11},{"ts":"2026-06-27 07:00","total":167729,"errors":12},
+  {"ts":"2026-06-27 08:00","total":169516,"errors":22},{"ts":"2026-06-27 09:00","total":172740,"errors":18},
+  {"ts":"2026-06-27 10:00","total":175530,"errors":8},{"ts":"2026-06-27 11:00","total":176788,"errors":16},
+  {"ts":"2026-06-27 12:00","total":173632,"errors":18},{"ts":"2026-06-27 13:00","total":245502,"errors":24},
+  {"ts":"2026-06-27 14:00","total":192855,"errors":12},{"ts":"2026-06-27 15:00","total":182292,"errors":12},
+  {"ts":"2026-06-27 16:00","total":184363,"errors":26},{"ts":"2026-06-27 17:00","total":167908,"errors":13},
+  {"ts":"2026-06-27 18:00","total":178049,"errors":9},{"ts":"2026-06-27 19:00","total":162377,"errors":9},
+  {"ts":"2026-06-27 20:00","total":156526,"errors":19},{"ts":"2026-06-27 21:00","total":146756,"errors":49},
+  {"ts":"2026-06-27 22:00","total":144862,"errors":59},{"ts":"2026-06-27 23:00","total":141246,"errors":17},
+  {"ts":"2026-06-28 00:00","total":148570,"errors":21},{"ts":"2026-06-28 01:00","total":182984,"errors":39},
+  {"ts":"2026-06-28 02:00","total":145921,"errors":21},{"ts":"2026-06-28 03:00","total":147314,"errors":20},
+  {"ts":"2026-06-28 04:00","total":151481,"errors":8},{"ts":"2026-06-28 05:00","total":196991,"errors":14},
+  {"ts":"2026-06-28 06:00","total":180593,"errors":20},{"ts":"2026-06-28 07:00","total":166134,"errors":10},
+  {"ts":"2026-06-28 08:00","total":172058,"errors":18},{"ts":"2026-06-28 09:00","total":171864,"errors":13},
+  {"ts":"2026-06-28 10:00","total":174233,"errors":11},{"ts":"2026-06-28 11:00","total":176312,"errors":16},
+  {"ts":"2026-06-28 12:00","total":176408,"errors":19},{"ts":"2026-06-28 13:00","total":246341,"errors":15},
+  {"ts":"2026-06-28 14:00","total":199520,"errors":13},{"ts":"2026-06-28 15:00","total":183903,"errors":12},
+  {"ts":"2026-06-28 16:00","total":185239,"errors":23},{"ts":"2026-06-28 17:00","total":177565,"errors":9},
+  {"ts":"2026-06-28 18:00","total":179259,"errors":13},{"ts":"2026-06-28 19:00","total":162337,"errors":7},
+  {"ts":"2026-06-28 20:00","total":154400,"errors":21},{"ts":"2026-06-28 21:00","total":143107,"errors":12},
+  {"ts":"2026-06-28 22:00","total":135284,"errors":11},{"ts":"2026-06-28 23:00","total":137466,"errors":8},
+  {"ts":"2026-06-29 00:00","total":146917,"errors":50},{"ts":"2026-06-29 01:00","total":182705,"errors":13},
+  {"ts":"2026-06-29 02:00","total":149107,"errors":10},{"ts":"2026-06-29 03:00","total":153754,"errors":7},
+  {"ts":"2026-06-29 04:00","total":49833,"errors":8}
+];
+const statusData = [
+  {"code":"403","count":1237},{"code":"400","count":1190},
+  {"code":"408","count":332},{"code":"404","count":323},
+  {"code":"405","count":21},{"code":"others","count":15}
+];
+const topErrorIPs = [
+  {"ip":"103.153.183.166","count":421},{"ip":"89.40.181.202","count":236},
+  {"ip":"186.2.158.100","count":235},{"ip":"104.197.141.11","count":120},
+  {"ip":"186.2.154.15","count":58},{"ip":"186.2.128.167","count":53},
+  {"ip":"186.2.158.156","count":46},{"ip":"186.2.159.66","count":40},
+  {"ip":"186.2.158.13","count":37},{"ip":"88.151.33.176","count":32}
+];
+const topErrorEndpoints = [
+  {"path":"/","count":1412,"type":"root"},{"path":"/airquality_iqair.php","count":1055,"type":"api"},
+  {"path":"/cgi-bin/[path-traversal]/bin/sh","count":30,"type":"attack"},{"path":"//","count":22,"type":"root"},
+  {"path":"/cgi-bin/[encoded-traversal]/bin/sh","count":13,"type":"attack"},{"path":"/index/police/index.html","count":12,"type":"attack"},
+  {"path":"/index/login","count":12,"type":"attack"},{"path":"/index/index/home","count":12,"type":"attack"},
+  {"path":"/index/home/login.html","count":12,"type":"attack"},{"path":"/.git/config (scanner)","count":8,"type":"attack"}
+];
+const errorModules = [
+  {"module":"autoindex:error","count":1207,"desc":"Không có DirectoryIndex — scanner quét thư mục /"},
+  {"module":"core:error","count":411,"desc":"Lỗi Apache core: URI không hợp lệ, request lỗi format"},
+  {"module":"authz_core:error","count":28,"desc":"Client bị từ chối — cấu hình server-status, .htaccess"},
+  {"module":"negotiation:error","count":23,"desc":"Content negotiation thất bại (không tìm được file phù hợp)"},
+  {"module":"mpm_prefork:error","count":1,"desc":"Lỗi process manager — cần theo dõi"}
+];
+const errorCodes = [
+  {"code":"AH01276","count":1207,"desc":"Cannot serve directory (no DirectoryIndex)"},
+  {"code":"AH00126","count":404,"desc":"URI không hợp lệ trong request"},
+  {"code":"AH01630","count":28,"desc":"Client bị từ chối bởi server configuration"},
+  {"code":"AH00687","count":23,"desc":"Content negotiation: không tìm được file phù hợp"},
+  {"code":"AH00082","count":6,"desc":"Child process problem"},
+  {"code":"AH00135","count":1,"desc":"Invalid method in request"}
+];
+
+// ============================================================
+// HELPERS
+// ============================================================
+const fmt = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n;
+const fmtFull = n => n.toLocaleString('vi-VN');
+
+// ============================================================
+// STAT CARDS
+// ============================================================
+(function renderStats(){
+  const totalReq = hourlyData.reduce((s,d)=>s+d.total,0);
+  const totalErr = hourlyData.reduce((s,d)=>s+d.errors,0);
+  const avgPerHour = Math.round(totalReq/hourlyData.length);
+  const errRate = (totalErr/totalReq*100).toFixed(3);
+  const peak = hourlyData.reduce((a,b)=>b.errors>a.errors?b:a);
+  document.getElementById('s-total').textContent = fmt(totalReq);
+  document.getElementById('s-rps').textContent = fmtFull(avgPerHour) + ' req/giờ TB';
+  document.getElementById('s-errors').textContent = fmtFull(totalErr);
+  document.getElementById('s-erate').textContent = errRate + '% tỷ lệ lỗi';
+  document.getElementById('s-peak-val').textContent = peak.errors;
+  document.getElementById('s-peak-ts').textContent = peak.ts;
+  document.getElementById('s-top-ip').textContent = topErrorIPs[0].ip;
+  document.getElementById('s-top-ip-count').textContent = fmtFull(topErrorIPs[0].count) + ' lần lỗi';
+  document.getElementById('chart-range').textContent = hourlyData[0].ts.split(' ')[0] + ' → ' + hourlyData[hourlyData.length-1].ts.split(' ')[0];
+})();
+
+(function renderAlert(){
+  const attackCount = topErrorEndpoints.filter(e=>e.type==='attack').reduce((s,e)=>s+e.count,0);
+  document.getElementById('alert-container').innerHTML = `
+    <div class="alert-bar">
+      <div class="alert-icon">⚠</div>
+      <div class="alert-text">
+        <strong>Phát hiện hoạt động đáng ngờ</strong> —
+        ${attackCount} lần thử khai thác path traversal qua <code style="font-family:var(--mono);font-size:11px;color:var(--danger)">/cgi-bin/</code> và ${topErrorEndpoints.filter(e=>e.type==='attack').length - 2} endpoint scan khác.
+        Dải IP <strong>186.2.x.x</strong> xuất hiện trong 5 IP lỗi hàng đầu — có thể là botnet quét đồng loạt.
+        Đỉnh bất thường tại <strong>25 Jun 08:00 UTC</strong> với 424 lỗi/giờ (gấp ~10× mức bình thường).
+      </div>
+    </div>`;
+})();
+
+(function renderChart(){
+  const svg = document.getElementById('traffic-svg');
+  const W = 1000, H = 200;
+  const PAD = {top:20, right:20, bottom:35, left:52};
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+  const n = hourlyData.length;
+  const maxTotal = Math.max(...hourlyData.map(d=>d.total));
+  const maxErr = Math.max(...hourlyData.map(d=>d.errors));
+  const xScale = i => PAD.left + (i/(n-1))*innerW;
+  const yScaleTotal = v => PAD.top + innerH - (v/maxTotal)*innerH;
+  const yScaleErr = v => PAD.top + innerH - (v/maxErr)*innerH;
+  let html = '';
+  for(let k=0;k<=4;k++){
+    const y = PAD.top + (k/4)*innerH;
+    const val = Math.round(maxTotal*(1-k/4)/1000);
+    html += `<line x1="${PAD.left}" x2="${W-PAD.right}" y1="${y}" y2="${y}" stroke="#243045" stroke-width="0.5"/>`;
+    if(k<4) html += `<text x="${PAD.left-6}" y="${y+4}" text-anchor="end" fill="#5a6a7e" font-size="9" font-family="Courier New">${val}K</text>`;
+  }
+  const days = ['2026-06-24','2026-06-25','2026-06-26','2026-06-27','2026-06-28','2026-06-29'];
+  days.forEach(day=>{
+    const idx = hourlyData.findIndex(d=>d.ts.startsWith(day+' 00') || (day==='2026-06-24' && d.ts.startsWith(day)));
+    if(idx<0) return;
+    const x = xScale(idx);
+    html += `<line x1="${x}" x2="${x}" y1="${PAD.top}" y2="${PAD.top+innerH}" stroke="#2a3a52" stroke-width="1" stroke-dasharray="2 4"/>`;
+    html += `<text x="${x+3}" y="${PAD.top+innerH+22}" fill="#5a6a7e" font-size="9" font-family="Courier New">${day.slice(5)}</text>`;
+  });
+  let areaPath = `M ${xScale(0)} ${PAD.top+innerH}`;
+  hourlyData.forEach((d,i)=>{ areaPath += ` L ${xScale(i)} ${yScaleTotal(d.total)}`; });
+  areaPath += ` L ${xScale(n-1)} ${PAD.top+innerH} Z`;
+  html += `<defs>
+    <linearGradient id="agrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a9eff" stop-opacity="0.18"/><stop offset="100%" stop-color="#4a9eff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="egrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4d5a" stop-opacity="0.5"/><stop offset="100%" stop-color="#ff4d5a" stop-opacity="0"/></linearGradient>
+  </defs>`;
+  html += `<path d="${areaPath}" fill="url(#agrad)"/>`;
+  let linePath = '';
+  hourlyData.forEach((d,i)=>{ linePath += (i===0?'M':'L') + ` ${xScale(i)} ${yScaleTotal(d.total)}`; });
+  html += `<path d="${linePath}" fill="none" stroke="#4a9eff" stroke-width="1.2" stroke-linejoin="round"/>`;
+  let errArea = `M ${xScale(0)} ${PAD.top+innerH}`;
+  hourlyData.forEach((d,i)=>{ errArea += ` L ${xScale(i)} ${yScaleErr(d.errors)}`; });
+  errArea += ` L ${xScale(n-1)} ${PAD.top+innerH} Z`;
+  html += `<path d="${errArea}" fill="url(#egrad)"/>`;
+  let errPath = '';
+  hourlyData.forEach((d,i)=>{ errPath += (i===0?'M':'L') + ` ${xScale(i)} ${yScaleErr(d.errors)}`; });
+  html += `<path d="${errPath}" fill="none" stroke="#ff4d5a" stroke-width="1.5" stroke-linejoin="round"/>`;
+  const spikeIdx = 27;
+  const sx = xScale(spikeIdx), sy = yScaleErr(424);
+  html += `<line x1="${sx}" x2="${sx}" y1="${sy-4}" y2="${sy-20}" class="spike-line"/>`;
+  html += `<text x="${sx+4}" y="${sy-12}" class="spike-label">424 lỗi/giờ</text>`;
+  hourlyData.forEach((d,i)=>{
+    const x = xScale(i) - innerW/(2*(n-1));
+    html += `<rect class="hover-zone" data-i="${i}" x="${x}" y="${PAD.top}" width="${innerW/(n-1)}" height="${innerH}" fill="transparent" style="cursor:crosshair"/>`;
+  });
+  html += `<text x="${W-PAD.right+4}" y="${PAD.top+8}" fill="#ff4d5a" font-size="8" font-family="Courier New">${maxErr}</text>`;
+  html += `<text x="${W-PAD.right+4}" y="${PAD.top+innerH}" fill="#ff4d5a" font-size="8" font-family="Courier New">0</text>`;
+  svg.innerHTML = html;
+  const tooltip = document.getElementById('tooltip');
+  const wrap = document.getElementById('chart-wrap');
+  svg.querySelectorAll('.hover-zone').forEach(zone=>{
+    zone.addEventListener('mousemove', e=>{
+      const i = parseInt(zone.dataset.i), d = hourlyData[i];
+      const rect = wrap.getBoundingClientRect(), svgRect = svg.getBoundingClientRect();
+      let left = svgRect.left - rect.left + (xScale(i)/W)*svgRect.width + 6;
+      if(left + 160 > rect.width) left -= 170;
+      tooltip.style.left = left+'px'; tooltip.style.top = '20px'; tooltip.style.opacity = '1';
+      document.getElementById('tt-ts').textContent = d.ts;
+      document.getElementById('tt-total').textContent = '▸ Requests: ' + fmtFull(d.total);
+      document.getElementById('tt-err').textContent = '▸ Lỗi: ' + d.errors + (d.errors > 200 ? ' ⚠ SPIKE' : '');
+    });
+    zone.addEventListener('mouseleave', ()=>{ tooltip.style.opacity='0'; });
+  });
+})();
+
+(function renderDonut(){
+  const colors = ['#f0a830','#ff4d5a','#a78bfa','#34c770','#4a9eff','#5a6a7e'];
+  const total = statusData.reduce((s,d)=>s+d.count,0);
+  const cx=70, cy=70, R=55, r=35;
+  let angle = -Math.PI/2, paths = '';
+  statusData.forEach((d,i)=>{
+    const slice = (d.count/total)*Math.PI*2;
+    const x1=cx+R*Math.cos(angle),y1=cy+R*Math.sin(angle);
+    const x2=cx+R*Math.cos(angle+slice),y2=cy+R*Math.sin(angle+slice);
+    const x3=cx+r*Math.cos(angle+slice),y3=cy+r*Math.sin(angle+slice);
+    const x4=cx+r*Math.cos(angle),y4=cy+r*Math.sin(angle);
+    const large = slice > Math.PI ? 1 : 0;
+    paths += `<path d="M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${x3},${y3} A${r},${r} 0 ${large},0 ${x4},${y4} Z" fill="${colors[i]}" opacity="0.9"/>`;
+    angle += slice;
+  });
+  paths += `<text x="${cx}" y="${cy-6}" text-anchor="middle" fill="#c9d4e0" font-size="18" font-weight="600" font-family="Courier New">${total}</text>`;
+  paths += `<text x="${cx}" y="${cy+10}" text-anchor="middle" fill="#5a6a7e" font-size="8" font-family="Courier New">TỔNG LỖI</text>`;
+  document.getElementById('donut-svg').innerHTML = paths;
+  const statusLabel = {'403':'403 Forbidden','400':'400 Bad Request','408':'408 Timeout','404':'404 Not Found','405':'405 Method Not Allowed','others':'Khác'};
+  document.getElementById('donut-legend').innerHTML = statusData.map((d,i)=>`
+    <div class="donut-legend-item">
+      <div class="donut-swatch" style="background:${colors[i]}"></div>
+      <span class="donut-code" style="color:${colors[i]}">${statusLabel[d.code]||d.code}</span>
+      <span class="donut-count">${fmtFull(d.count)}</span>
+      <span class="donut-pct">${(d.count/total*100).toFixed(1)}%</span>
+    </div>`).join('');
+})();
+
+(function renderIPs(){
+  const max = topErrorIPs[0].count;
+  document.getElementById('ip-list').innerHTML = topErrorIPs.map(ip=>{
+    const pct = (ip.count/max*100).toFixed(1);
+    const is186 = ip.ip.startsWith('186.2.');
+    const color = is186 ? 'var(--warn)' : 'var(--danger)';
+    return `<div class="ip-row">
+      <div class="ip-meta">
+        <span class="ip-addr" style="color:${color}">${ip.ip}${is186?' <span style="font-size:9px;opacity:.7">[botnet?]</span>':''}</span>
+        <span class="ip-count">${fmtFull(ip.count)}</span>
+      </div>
+      <div class="ip-bar-bg"><div class="ip-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${color}99,${color})"></div></div>
+    </div>`;
+  }).join('');
+})();
+
+(function renderEndpoints(){
+  const tagMap = {
+    'attack':'<span class="ep-tag threat">ATTACK</span>',
+    'api':'<span class="ep-tag api">API</span>',
+    'root':'<span class="ep-tag root">ROOT</span>'
+  };
+  document.getElementById('ep-tbody').innerHTML = topErrorEndpoints.map(ep=>{
+    const cls = ep.type==='attack'?'attack':ep.type==='api'?'api':'normal';
+    return `<tr><td><span class="ep-path ${cls}" title="${ep.path}">${ep.path}</span>${tagMap[ep.type]||''}</td><td><span class="ep-count">${fmtFull(ep.count)}</span></td></tr>`;
+  }).join('');
+})();
+
+(function renderMinChart(){
+  const perMinute = [
+    903593,639084,528380,435543,394002,380694,359304,348674,343795,337570,
+    341083,326429,315239,310747,307926,325712,316712,308895,302693,301271,
+    306723,295886,296244,293596,292340,295087,291448,288477,286108,286538,
+    415596,424461,378866,355646,334133,333518,318611,309489,303264,300962,
+    303723,297415,294096,289094,289228,304648,294347,292867,288936,287562,
+    294956,283260,282986,283396,280183,285729,278061,277671,282416,292576
+  ];
+  const baseline = 312209, maxVal = Math.max(...perMinute);
+  const classify = (mm, val) => {
+    if (mm === 0) return 'spike';
+    if (mm >= 1 && mm <= 9) return 'tail';
+    if (mm >= 30 && mm <= 32) return 'secondary';
+    if (val > baseline * 1.15) return 'secondary';
+    return 'normal';
+  };
+  let barsHTML = '', labelsHTML = '';
+  perMinute.forEach((val, mm) => {
+    const h = Math.round((val / maxVal) * 100);
+    const cls = classify(mm, val);
+    barsHTML += `<div class="min-bar ${cls}" style="height:${h}%" title=":${String(mm).padStart(2,'0')} — ${val.toLocaleString()} req"></div>`;
+    labelsHTML += `<div class="min-x-label" style="${mm===0?'color:var(--danger)':mm===30?'color:var(--warn)':''}">${mm%10===0||mm===30?':'+String(mm).padStart(2,'0'):''}</div>`;
+  });
+  document.getElementById('min-bars').innerHTML = barsHTML;
+  document.getElementById('min-labels').innerHTML = labelsHTML;
+})();
+
+(function renderUA(){
+  const uaData = [
+    {label:'okhttp/5.0.0-alpha.4', count:16533503, color:'#4a9eff'},
+    {label:'Other / Unknown',       count:3261914,  color:'#5a6a7e'},
+    {label:'okhttp/4.12.0',         count:114865,   color:'#a78bfa'},
+    {label:'WeatherLive-iOS',        count:61083,    color:'#34c770'},
+    {label:'Browser / Bot',          count:17626,    color:'#f0a830'},
+  ];
+  const total = uaData.reduce((s,d)=>s+d.count,0);
+  document.getElementById('ua-total-badge').textContent = total.toLocaleString('vi-VN') + ' req';
+  const cx=55, cy=55, R=48, r=30;
+  let angle = -Math.PI/2, paths = '';
+  uaData.forEach(d=>{
+    const slice = (d.count/total)*Math.PI*2;
+    const x1=cx+R*Math.cos(angle),y1=cy+R*Math.sin(angle);
+    const x2=cx+R*Math.cos(angle+slice),y2=cy+R*Math.sin(angle+slice);
+    const x3=cx+r*Math.cos(angle+slice),y3=cy+r*Math.sin(angle+slice);
+    const x4=cx+r*Math.cos(angle),y4=cy+r*Math.sin(angle);
+    const large = slice > Math.PI ? 1 : 0;
+    paths += `<path d="M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${x3},${y3} A${r},${r} 0 ${large},0 ${x4},${y4} Z" fill="${d.color}" opacity="0.9"/>`;
+    angle += slice;
+  });
+  paths += `<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="#c9d4e0" font-size="13" font-weight="700" font-family="Courier New">82.6%</text>`;
+  paths += `<text x="${cx}" y="${cy+10}" text-anchor="middle" fill="#5a6a7e" font-size="8" font-family="Courier New">okhttp</text>`;
+  document.getElementById('ua-donut').innerHTML = paths;
+  document.getElementById('ua-list').innerHTML = uaData.map(d=>{
+    const pct = (d.count/total*100).toFixed(1);
+    return `<div class="ua-row"><div class="ua-label" style="color:${d.color}" title="${d.label}">${d.label}</div><div class="ua-bar-bg"><div class="ua-bar-fill" style="width:${pct}%;background:${d.color}"></div></div><div class="ua-pct">${pct}%</div></div>`;
+  }).join('');
+})();
+
+(function renderModules(){
+  const total = errorModules.reduce((s,m)=>s+m.count,0);
+  document.getElementById('total-err-log').textContent = fmtFull(total) + ' entries';
+  const modColors = ['#f0a830','#ff4d5a','#a78bfa','#4a9eff','#34c770'];
+  document.getElementById('module-list').innerHTML = errorModules.map((m,i)=>`
+    <div class="module-row">
+      <div><div class="module-name" style="color:${modColors[i]}">${m.module}</div><div class="module-desc">${m.desc}</div></div>
+      <div class="module-bar-bg"><div class="module-bar-fill" style="width:${(m.count/errorModules[0].count*100).toFixed(1)}%;background:${modColors[i]}44;border:0;height:6px"></div></div>
+      <div class="module-count">${fmtFull(m.count)}</div>
+    </div>`).join('');
+  document.getElementById('ecode-grid').innerHTML = errorCodes.map(ec=>`
+    <div class="ecode-item"><span class="ecode-id">${ec.code}</span><span class="ecode-n">${fmtFull(ec.count)}x</span><span style="font-size:10px;color:var(--muted)">${ec.desc}</span></div>`).join('');
+})();
+
+// ============================================================
+// SPIKE TRACING (Overview) — phân rã nguyên nhân traffic tăng đột biến
+// ============================================================
+const SPIKE = {"byHour":[{"ts":"06-24 06:00","t":91422,"iq":47990,"ow":26370,"aq":15529,"ot":1533,"an":74177,"io":910,"bo":14088,"ni":32456},{"ts":"06-24 07:00","t":162048,"iq":84263,"ow":50534,"aq":23835,"ot":3416,"an":134166,"io":2074,"bo":21830,"ni":22688},{"ts":"06-24 08:00","t":166378,"iq":88766,"ow":52333,"aq":22591,"ot":2688,"an":140719,"io":1530,"bo":20342,"ni":21801},{"ts":"06-24 09:00","t":172926,"iq":89557,"ow":54702,"aq":25958,"ot":2709,"an":144121,"io":1569,"bo":23579,"ni":22504},{"ts":"06-24 10:00","t":173184,"iq":88526,"ow":54923,"aq":26970,"ot":2765,"an":143237,"io":1469,"bo":24641,"ni":20547},{"ts":"06-24 11:00","t":174331,"iq":88908,"ow":55474,"aq":27229,"ot":2720,"an":143990,"io":1632,"bo":24830,"ni":19045},{"ts":"06-24 12:00","t":172333,"iq":88941,"ow":54939,"aq":25779,"ot":2674,"an":143417,"io":1532,"bo":23613,"ni":19535},{"ts":"06-24 13:00","t":244369,"iq":159233,"ow":56898,"aq":25823,"ot":2415,"an":215761,"io":1566,"bo":23735,"ni":62476},{"ts":"06-24 14:00","t":190810,"iq":107307,"ow":51929,"aq":28820,"ot":2754,"an":159227,"io":1504,"bo":26271,"ni":20499},{"ts":"06-24 15:00","t":179246,"iq":95120,"ow":55603,"aq":25808,"ot":2715,"an":150418,"io":1306,"bo":23751,"ni":17137},{"ts":"06-24 16:00","t":180455,"iq":93866,"ow":58264,"aq":25833,"ot":2492,"an":152389,"io":1112,"bo":23391,"ni":16301},{"ts":"06-24 17:00","t":170181,"iq":87586,"ow":54780,"aq":25161,"ot":2654,"an":142571,"io":904,"bo":22830,"ni":13718},{"ts":"06-24 18:00","t":175259,"iq":90985,"ow":57734,"aq":23956,"ot":2584,"an":148855,"io":765,"bo":22040,"ni":13703},{"ts":"06-24 19:00","t":157615,"iq":81468,"ow":51155,"aq":21615,"ot":3377,"an":132666,"io":1134,"bo":20101,"ni":11221},{"ts":"06-24 20:00","t":151820,"iq":79387,"ow":50043,"aq":19691,"ot":2699,"an":128992,"io":863,"bo":18400,"ni":12658},{"ts":"06-24 21:00","t":143929,"iq":74746,"ow":47901,"aq":18741,"ot":2541,"an":122065,"io":834,"bo":17668,"ni":11245},{"ts":"06-24 22:00","t":136314,"iq":70206,"ow":46508,"aq":16922,"ot":2678,"an":115833,"io":1116,"bo":15859,"ni":11405},{"ts":"06-24 23:00","t":139739,"iq":70159,"ow":47353,"aq":19686,"ot":2541,"an":116470,"io":1419,"bo":18507,"ni":13052},{"ts":"06-25 00:00","t":147278,"iq":72559,"ow":49148,"aq":22890,"ot":2681,"an":120987,"io":1465,"bo":21245,"ni":15984},{"ts":"06-25 01:00","t":183780,"iq":110447,"ow":47600,"aq":22517,"ot":3216,"an":157533,"io":1212,"bo":21640,"ni":38321},{"ts":"06-25 02:00","t":145545,"iq":78322,"ow":43069,"aq":21560,"ot":2594,"an":121085,"io":1141,"bo":19798,"ni":13952},{"ts":"06-25 03:00","t":154146,"iq":75923,"ow":47283,"aq":28125,"ot":2815,"an":122996,"io":1150,"bo":26219,"ni":14625},{"ts":"06-25 04:00","t":155683,"iq":78549,"ow":49425,"aq":24910,"ot":2799,"an":127060,"io":1410,"bo":22587,"ni":15940},{"ts":"06-25 05:00","t":193371,"iq":108847,"ow":57911,"aq":24065,"ot":2548,"an":166033,"io":1342,"bo":22069,"ni":33214},{"ts":"06-25 06:00","t":181175,"iq":94218,"ow":55187,"aq":29143,"ot":2627,"an":149054,"io":1357,"bo":27024,"ni":15446},{"ts":"06-25 07:00","t":167979,"iq":85922,"ow":51458,"aq":27918,"ot":2681,"an":134850,"io":1527,"bo":26106,"ni":13754},{"ts":"06-25 08:00","t":173053,"iq":90760,"ow":53250,"aq":25407,"ot":3636,"an":142329,"io":1615,"bo":23331,"ni":16467},{"ts":"06-25 09:00","t":176573,"iq":90486,"ow":55068,"aq":28111,"ot":2908,"an":144666,"io":1652,"bo":25688,"ni":18033},{"ts":"06-25 10:00","t":182845,"iq":89635,"ow":55873,"aq":34595,"ot":2742,"an":145191,"io":1554,"bo":32019,"ni":16471},{"ts":"06-25 11:00","t":177132,"iq":89365,"ow":56211,"aq":28894,"ot":2662,"an":144288,"io":1738,"bo":26583,"ni":15296},{"ts":"06-25 12:00","t":177430,"iq":91405,"ow":56174,"aq":26934,"ot":2917,"an":145844,"io":1898,"bo":24473,"ni":16541},{"ts":"06-25 13:00","t":245499,"iq":156723,"ow":57985,"aq":28482,"ot":2309,"an":213777,"io":1707,"bo":26238,"ni":52195},{"ts":"06-25 14:00","t":187425,"iq":105256,"ow":52270,"aq":27164,"ot":2735,"an":157154,"io":1623,"bo":24555,"ni":17092},{"ts":"06-25 15:00","t":176717,"iq":93616,"ow":55005,"aq":24892,"ot":3204,"an":148540,"io":1442,"bo":22458,"ni":14152},{"ts":"06-25 16:00","t":183587,"iq":93588,"ow":58468,"aq":28920,"ot":2611,"an":151993,"io":1085,"bo":26607,"ni":13028},{"ts":"06-25 17:00","t":174490,"iq":88294,"ow":55010,"aq":28333,"ot":2853,"an":143158,"io":996,"bo":26241,"ni":11728},{"ts":"06-25 18:00","t":176375,"iq":91404,"ow":58194,"aq":23750,"ot":3027,"an":149756,"io":801,"bo":21816,"ni":11712},{"ts":"06-25 19:00","t":160801,"iq":81751,"ow":51913,"aq":24508,"ot":2629,"an":133556,"io":775,"bo":22807,"ni":10006},{"ts":"06-25 20:00","t":156397,"iq":80335,"ow":51934,"aq":21262,"ot":2866,"an":131756,"io":831,"bo":20015,"ni":11787},{"ts":"06-25 21:00","t":150874,"iq":76188,"ow":50015,"aq":21857,"ot":2814,"an":125410,"io":1021,"bo":20683,"ni":10531},{"ts":"06-25 22:00","t":141410,"iq":71673,"ow":47981,"aq":19112,"ot":2644,"an":118560,"io":1384,"bo":17957,"ni":10725},{"ts":"06-25 23:00","t":144573,"iq":71439,"ow":48752,"aq":21742,"ot":2640,"an":118866,"io":1741,"bo":20471,"ni":12136},{"ts":"06-26 00:00","t":150762,"iq":72872,"ow":50483,"aq":24376,"ot":3031,"an":122878,"io":1590,"bo":22754,"ni":14786},{"ts":"06-26 01:00","t":186190,"iq":110091,"ow":48222,"aq":25255,"ot":2622,"an":158094,"io":1240,"bo":23588,"ni":34158},{"ts":"06-26 02:00","t":149781,"iq":79631,"ow":44200,"aq":23270,"ot":2680,"an":123707,"io":1097,"bo":21417,"ni":13014},{"ts":"06-26 03:00","t":153057,"iq":75749,"ow":47689,"aq":26893,"ot":2726,"an":123741,"io":1095,"bo":24735,"ni":13727},{"ts":"06-26 04:00","t":157603,"iq":78469,"ow":50218,"aq":26201,"ot":2715,"an":128692,"io":1158,"bo":24077,"ni":15374},{"ts":"06-26 05:00","t":196801,"iq":110147,"ow":58640,"aq":26460,"ot":1554,"an":168616,"io":1162,"bo":24394,"ni":30804},{"ts":"06-26 06:00","t":175683,"iq":93432,"ow":55887,"aq":24574,"ot":1790,"an":149399,"io":1298,"bo":22093,"ni":14085},{"ts":"06-26 07:00","t":158267,"iq":84162,"ow":51346,"aq":20958,"ot":1801,"an":135218,"io":1240,"bo":18907,"ni":12669},{"ts":"06-26 08:00","t":165311,"iq":88873,"ow":53785,"aq":21000,"ot":1653,"an":142570,"io":1268,"bo":18744,"ni":15457},{"ts":"06-26 09:00","t":173474,"iq":91909,"ow":56501,"aq":23246,"ot":1818,"an":148139,"io":1369,"bo":20929,"ni":17143},{"ts":"06-26 10:00","t":173541,"iq":90447,"ow":56102,"aq":24620,"ot":2372,"an":146682,"io":1930,"bo":22176,"ni":16089},{"ts":"06-26 11:00","t":172416,"iq":89824,"ow":55841,"aq":24845,"ot":1906,"an":145719,"io":1544,"bo":22256,"ni":14664},{"ts":"06-26 12:00","t":171147,"iq":90455,"ow":55482,"aq":23347,"ot":1863,"an":145147,"io":1503,"bo":21052,"ni":15279},{"ts":"06-26 13:00","t":240821,"iq":159983,"ow":58280,"aq":20143,"ot":2415,"an":217392,"io":1415,"bo":18874,"ni":49992},{"ts":"06-26 14:00","t":187186,"iq":106032,"ow":52734,"aq":26616,"ot":1804,"an":158393,"io":1494,"bo":24085,"ni":16268},{"ts":"06-26 15:00","t":175397,"iq":93752,"ow":55973,"aq":23953,"ot":1719,"an":149426,"io":1234,"bo":21801,"ni":12974},{"ts":"06-26 16:00","t":178579,"iq":93450,"ow":59797,"aq":23556,"ot":1776,"an":153530,"io":966,"bo":21178,"ni":12320},{"ts":"06-26 17:00","t":169953,"iq":88587,"ow":56242,"aq":23521,"ot":1603,"an":145212,"io":846,"bo":21246,"ni":10932},{"ts":"06-26 18:00","t":174367,"iq":92063,"ow":58675,"aq":21908,"ot":1721,"an":150764,"io":712,"bo":20163,"ni":10757},{"ts":"06-26 19:00","t":156223,"iq":81775,"ow":52094,"aq":20798,"ot":1556,"an":133713,"io":827,"bo":19160,"ni":9351},{"ts":"06-26 20:00","t":151258,"iq":80048,"ow":51193,"aq":18626,"ot":1391,"an":130622,"io":765,"bo":17441,"ni":10653},{"ts":"06-26 21:00","t":142265,"iq":74695,"ow":48763,"aq":17087,"ot":1720,"an":122499,"io":882,"bo":16084,"ni":9297},{"ts":"06-26 22:00","t":136315,"iq":69824,"ow":47499,"aq":17314,"ot":1678,"an":116423,"io":970,"bo":16345,"ni":9489},{"ts":"06-26 23:00","t":137677,"iq":69352,"ow":47886,"aq":18760,"ot":1679,"an":116168,"io":1121,"bo":17769,"ni":10895},{"ts":"06-27 00:00","t":144382,"iq":71390,"ow":49396,"aq":21877,"ot":1719,"an":120252,"io":1103,"bo":20362,"ni":13331},{"ts":"06-27 01:00","t":178821,"iq":109380,"ow":47870,"aq":20008,"ot":1563,"an":156896,"io":992,"bo":18523,"ni":32862},{"ts":"06-27 02:00","t":146812,"iq":79601,"ow":44152,"aq":21418,"ot":1641,"an":123578,"io":977,"bo":19622,"ni":12364},{"ts":"06-27 03:00","t":149910,"iq":77216,"ow":47420,"aq":23667,"ot":1607,"an":124558,"io":1046,"bo":21789,"ni":13048},{"ts":"06-27 04:00","t":153845,"iq":79286,"ow":48599,"aq":24245,"ot":1715,"an":127908,"io":1064,"bo":22290,"ni":14066},{"ts":"06-27 05:00","t":197215,"iq":112884,"ow":58291,"aq":24395,"ot":1645,"an":170991,"io":1126,"bo":22524,"ni":30040},{"ts":"06-27 06:00","t":181722,"iq":96683,"ow":55042,"aq":28148,"ot":1849,"an":151564,"io":1258,"bo":26102,"ni":13488},{"ts":"06-27 07:00","t":167539,"iq":87519,"ow":51878,"aq":26478,"ot":1664,"an":139125,"io":1293,"bo":24414,"ni":12494},{"ts":"06-27 08:00","t":169302,"iq":90608,"ow":53242,"aq":23816,"ot":1636,"an":143569,"io":1351,"bo":21731,"ni":14629},{"ts":"06-27 09:00","t":172507,"iq":90071,"ow":54184,"aq":26525,"ot":1727,"an":144239,"io":1459,"bo":24069,"ni":15196},{"ts":"06-27 10:00","t":175249,"iq":89621,"ow":55369,"aq":28538,"ot":1721,"an":144858,"io":1357,"bo":26320,"ni":14406},{"ts":"06-27 11:00","t":176576,"iq":90194,"ow":56409,"aq":28189,"ot":1784,"an":146676,"io":1388,"bo":25643,"ni":13758},{"ts":"06-27 12:00","t":173377,"iq":89357,"ow":55738,"aq":26515,"ot":1767,"an":144633,"io":1415,"bo":24331,"ni":14216},{"ts":"06-27 13:00","t":245045,"iq":161483,"ow":57779,"aq":23973,"ot":1810,"an":218703,"io":1485,"bo":21798,"ni":47777},{"ts":"06-27 14:00","t":192582,"iq":107980,"ow":52807,"aq":29720,"ot":2075,"an":160262,"io":1543,"bo":27237,"ni":15346},{"ts":"06-27 15:00","t":181982,"iq":96611,"ow":56573,"aq":27003,"ot":1795,"an":152724,"io":1385,"bo":24682,"ni":12430},{"ts":"06-27 16:00","t":184046,"iq":96122,"ow":59680,"aq":26285,"ot":1959,"an":156073,"io":993,"bo":23883,"ni":11668},{"ts":"06-27 17:00","t":167632,"iq":87213,"ow":53624,"aq":25141,"ot":1654,"an":141077,"io":830,"bo":23022,"ni":10401},{"ts":"06-27 18:00","t":177821,"iq":92361,"ow":59171,"aq":24595,"ot":1694,"an":151727,"io":794,"bo":22613,"ni":10168},{"ts":"06-27 19:00","t":162140,"iq":83372,"ow":53822,"aq":23426,"ot":1520,"an":137036,"io":857,"bo":21658,"ni":9075},{"ts":"06-27 20:00","t":156359,"iq":81496,"ow":53329,"aq":20017,"ot":1517,"an":134351,"io":759,"bo":18663,"ni":10475},{"ts":"06-27 21:00","t":146572,"iq":74865,"ow":49970,"aq":20168,"ot":1569,"an":123905,"io":789,"bo":19187,"ni":8924},{"ts":"06-27 22:00","t":144701,"iq":70713,"ow":48371,"aq":23381,"ot":2236,"an":118090,"io":1547,"bo":22367,"ni":8937},{"ts":"06-27 23:00","t":141150,"iq":70448,"ow":49049,"aq":20100,"ot":1553,"an":118608,"io":1009,"bo":18953,"ni":10152},{"ts":"06-28 00:00","t":148400,"iq":73430,"ow":50606,"aq":22572,"ot":1792,"an":123491,"io":917,"bo":21164,"ni":12723},{"ts":"06-28 01:00","t":182625,"iq":110697,"ow":48565,"aq":21477,"ot":1886,"an":158887,"io":913,"bo":20037,"ni":30697},{"ts":"06-28 02:00","t":145704,"iq":78035,"ow":43753,"aq":22036,"ot":1880,"an":121740,"io":846,"bo":20242,"ni":11030},{"ts":"06-28 03:00","t":147161,"iq":75276,"ow":46447,"aq":23834,"ot":1604,"an":121929,"io":930,"bo":21722,"ni":11582},{"ts":"06-28 04:00","t":151304,"iq":77263,"ow":48185,"aq":24277,"ot":1579,"an":125474,"io":1056,"bo":22184,"ni":12322},{"ts":"06-28 05:00","t":196737,"iq":112751,"ow":58398,"aq":23268,"ot":2320,"an":171297,"io":1329,"bo":21115,"ni":27710},{"ts":"06-28 06:00","t":180424,"iq":94971,"ow":56102,"aq":27379,"ot":1972,"an":151102,"io":1293,"bo":25162,"ni":12404},{"ts":"06-28 07:00","t":165989,"iq":86530,"ow":52609,"aq":25263,"ot":1587,"an":138975,"io":1285,"bo":23198,"ni":11051},{"ts":"06-28 08:00","t":171883,"iq":90513,"ow":53992,"aq":25290,"ot":2088,"an":144251,"io":1414,"bo":22948,"ni":12760},{"ts":"06-28 09:00","t":171670,"iq":89419,"ow":55052,"aq":25516,"ot":1683,"an":144257,"io":1524,"bo":23037,"ni":12691},{"ts":"06-28 10:00","t":174058,"iq":89637,"ow":55901,"aq":26689,"ot":1831,"an":145525,"io":1277,"bo":24281,"ni":12320},{"ts":"06-28 11:00","t":176067,"iq":90722,"ow":56899,"aq":26564,"ot":1882,"an":147207,"io":1549,"bo":24248,"ni":11715},{"ts":"06-28 12:00","t":176199,"iq":91493,"ow":57331,"aq":25772,"ot":1603,"an":148027,"io":1597,"bo":23799,"ni":12627},{"ts":"06-28 13:00","t":245874,"iq":162467,"ow":58840,"aq":22956,"ot":1611,"an":220763,"io":1513,"bo":20921,"ni":41662},{"ts":"06-28 14:00","t":199273,"iq":112515,"ow":54474,"aq":30384,"ot":1900,"an":166642,"io":1541,"bo":27889,"ni":13998},{"ts":"06-28 15:00","t":183664,"iq":97890,"ow":57638,"aq":26517,"ot":1619,"an":155283,"io":1326,"bo":24270,"ni":11563},{"ts":"06-28 16:00","t":185008,"iq":97009,"ow":59861,"aq":26285,"ot":1853,"an":157349,"io":1061,"bo":23724,"ni":10983},{"ts":"06-28 17:00","t":177307,"iq":92457,"ow":57349,"aq":25646,"ot":1855,"an":150424,"io":885,"bo":22997,"ni":9747},{"ts":"06-28 18:00","t":178985,"iq":93313,"ow":58999,"aq":25042,"ot":1631,"an":152266,"io":837,"bo":23058,"ni":9344},{"ts":"06-28 19:00","t":162060,"iq":84186,"ow":53323,"aq":22848,"ot":1703,"an":137130,"io":849,"bo":21210,"ni":8273},{"ts":"06-28 20:00","t":154177,"iq":81550,"ow":52613,"aq":18204,"ot":1810,"an":133481,"io":819,"bo":16808,"ni":8721},{"ts":"06-28 21:00","t":142942,"iq":74443,"ow":48454,"aq":18193,"ot":1852,"an":121846,"io":834,"bo":17241,"ni":7154},{"ts":"06-28 22:00","t":135097,"iq":69905,"ow":46601,"aq":16880,"ot":1711,"an":115164,"io":1098,"bo":16002,"ni":7642},{"ts":"06-28 23:00","t":137279,"iq":69889,"ow":46573,"aq":19244,"ot":1573,"an":115258,"io":1237,"bo":18043,"ni":9064},{"ts":"06-29 00:00","t":146715,"iq":73027,"ow":48959,"aq":22196,"ot":2533,"an":121423,"io":1506,"bo":20775,"ni":11482},{"ts":"06-29 01:00","t":182404,"iq":111493,"ow":47916,"aq":21294,"ot":1701,"an":158495,"io":983,"bo":19764,"ni":26469},{"ts":"06-29 02:00","t":148963,"iq":80581,"ow":44329,"aq":22454,"ot":1599,"an":124255,"io":959,"bo":20533,"ni":10424},{"ts":"06-29 03:00","t":153615,"iq":79173,"ow":48548,"aq":24138,"ot":1756,"an":127299,"io":1098,"bo":21944,"ni":11368},{"ts":"06-29 04:00","t":49780,"iq":25058,"ow":15960,"aq":8018,"ot":744,"an":41060,"io":313,"bo":7318,"ni":3923}],"byMin":[{"t":903205,"iq":514224,"ow":336758,"aq":49337,"ot":2886,"an":851525,"io":2096,"bo":45450},{"t":638687,"iq":371317,"ow":197164,"aq":64459,"ot":5747,"an":570007,"io":2364,"bo":58904},{"t":527983,"iq":299176,"ow":165101,"aq":57996,"ot":5710,"an":464875,"io":2155,"bo":53156},{"t":435151,"iq":246859,"ow":130201,"aq":51991,"ot":6100,"an":376689,"io":2783,"bo":47503},{"t":393564,"iq":221537,"ow":114852,"aq":50878,"ot":6297,"an":336453,"io":2340,"bo":46388},{"t":380111,"iq":208650,"ow":112764,"aq":52051,"ot":6646,"an":321037,"io":2473,"bo":47844},{"t":358466,"iq":194998,"ow":107899,"aq":48979,"ot":6590,"an":302338,"io":2470,"bo":45016},{"t":347892,"iq":187283,"ow":104690,"aq":48323,"ot":7596,"an":291527,"io":2325,"bo":44263},{"t":343102,"iq":184806,"ow":103642,"aq":48418,"ot":6236,"an":287648,"io":2453,"bo":44574},{"t":337024,"iq":183746,"ow":100984,"aq":46236,"ot":6058,"an":283986,"io":2477,"bo":42091},{"t":340534,"iq":183307,"ow":102247,"aq":48134,"ot":6846,"an":285021,"io":3155,"bo":43791},{"t":325869,"iq":171559,"ow":97164,"aq":51452,"ot":5694,"an":268104,"io":2219,"bo":47612},{"t":314709,"iq":167314,"ow":95632,"aq":46982,"ot":4781,"an":262153,"io":2264,"bo":43248},{"t":310227,"iq":162261,"ow":93684,"aq":50179,"ot":4103,"an":255020,"io":2465,"bo":46330},{"t":307402,"iq":159495,"ow":92313,"aq":51641,"ot":3953,"an":250942,"io":2406,"bo":47833},{"t":325221,"iq":168387,"ow":99030,"aq":52879,"ot":4925,"an":266796,"io":2372,"bo":48805},{"t":316239,"iq":165027,"ow":93495,"aq":53076,"ot":4641,"an":257509,"io":2323,"bo":49353},{"t":308427,"iq":160841,"ow":92785,"aq":51113,"ot":3688,"an":253108,"io":2277,"bo":47197},{"t":302141,"iq":157221,"ow":90707,"aq":50031,"ot":4182,"an":247320,"io":2658,"bo":46148},{"t":300834,"iq":156820,"ow":90088,"aq":50199,"ot":3727,"an":246004,"io":2532,"bo":46510},{"t":306294,"iq":158367,"ow":93295,"aq":50143,"ot":4489,"an":251007,"io":2846,"bo":46292},{"t":295440,"iq":152508,"ow":89002,"aq":50526,"ot":3404,"an":240475,"io":2305,"bo":46949},{"t":295809,"iq":151083,"ow":88142,"aq":53343,"ot":3241,"an":238558,"io":2384,"bo":49453},{"t":293177,"iq":149795,"ow":87434,"aq":52706,"ot":3242,"an":235868,"io":2469,"bo":49312},{"t":291870,"iq":149245,"ow":87157,"aq":52347,"ot":3121,"an":235628,"io":2274,"bo":48574},{"t":294652,"iq":151453,"ow":89369,"aq":50278,"ot":3552,"an":239932,"io":2357,"bo":46532},{"t":291007,"iq":149852,"ow":87175,"aq":50332,"ot":3648,"an":236064,"io":2272,"bo":46725},{"t":288062,"iq":148012,"ow":86136,"aq":50350,"ot":3564,"an":232748,"io":2381,"bo":47052},{"t":285676,"iq":147669,"ow":86058,"aq":48534,"ot":3415,"an":232443,"io":2551,"bo":45123},{"t":285678,"iq":147264,"ow":86263,"aq":48510,"ot":3641,"an":232501,"io":2310,"bo":45051},{"t":415116,"iq":217356,"ow":140905,"aq":53029,"ot":3826,"an":358500,"io":2514,"bo":48002},{"t":424036,"iq":221279,"ow":143578,"aq":53411,"ot":5768,"an":364747,"io":2319,"bo":49594},{"t":378473,"iq":196636,"ow":123810,"aq":52911,"ot":5116,"an":319905,"io":2304,"bo":48904},{"t":355213,"iq":186354,"ow":114028,"aq":50163,"ot":4668,"an":299257,"io":2556,"bo":46363},{"t":333748,"iq":176331,"ow":106309,"aq":46944,"ot":4164,"an":281627,"io":2379,"bo":43286},{"t":333112,"iq":175519,"ow":106303,"aq":46953,"ot":4337,"an":281081,"io":2251,"bo":43144},{"t":318212,"iq":168483,"ow":102066,"aq":43669,"ot":3994,"an":269858,"io":2379,"bo":39846},{"t":309037,"iq":164420,"ow":99190,"aq":41702,"ot":3725,"an":262827,"io":2431,"bo":37842},{"t":302844,"iq":161566,"ow":96634,"aq":41154,"ot":3490,"an":257139,"io":2574,"bo":37467},{"t":300479,"iq":160141,"ow":94916,"aq":41929,"ot":3493,"an":254273,"io":2356,"bo":38208},{"t":303299,"iq":160916,"ow":96289,"aq":42043,"ot":4051,"an":256308,"io":2401,"bo":38326},{"t":297023,"iq":157980,"ow":92995,"aq":41766,"ot":4282,"an":249999,"io":2382,"bo":38925},{"t":293734,"iq":155044,"ow":92511,"aq":42327,"ot":3852,"an":246695,"io":2697,"bo":38738},{"t":288697,"iq":153119,"ow":90052,"aq":42139,"ot":3387,"an":241853,"io":2477,"bo":38687},{"t":288759,"iq":152943,"ow":90188,"aq":42388,"ot":3240,"an":241896,"io":2404,"bo":38894},{"t":304250,"iq":161485,"ow":95580,"aq":42979,"ot":4206,"an":256094,"io":2440,"bo":39290},{"t":293958,"iq":158405,"ow":90114,"aq":42079,"ot":3360,"an":247466,"io":2212,"bo":38691},{"t":292467,"iq":156578,"ow":90248,"aq":42303,"ot":3338,"an":245765,"io":2329,"bo":38627},{"t":288544,"iq":154452,"ow":88691,"aq":41955,"ot":3446,"an":242112,"io":2396,"bo":38276},{"t":287146,"iq":153257,"ow":88218,"aq":42539,"ot":3132,"an":240450,"io":2366,"bo":39065},{"t":294511,"iq":156020,"ow":91481,"aq":42936,"ot":4074,"an":246605,"io":2390,"bo":39213},{"t":282852,"iq":150676,"ow":87698,"aq":41110,"ot":3368,"an":237096,"io":2301,"bo":37750},{"t":282565,"iq":150637,"ow":87434,"aq":41357,"ot":3137,"an":236780,"io":2387,"bo":37964},{"t":283005,"iq":150301,"ow":86984,"aq":41740,"ot":3980,"an":236418,"io":2781,"bo":38119},{"t":279730,"iq":148527,"ow":86409,"aq":41473,"ot":3321,"an":234049,"io":2450,"bo":37812},{"t":285301,"iq":151460,"ow":88868,"aq":41510,"ot":3463,"an":239511,"io":2223,"bo":37903},{"t":277219,"iq":147135,"ow":85271,"aq":41099,"ot":3714,"an":231256,"io":2356,"bo":37821},{"t":277255,"iq":147568,"ow":85529,"aq":41148,"ot":3010,"an":232030,"io":2235,"bo":37706},{"t":282021,"iq":149877,"ow":87983,"aq":40868,"ot":3293,"an":236424,"io":2709,"bo":37422},{"t":292163,"iq":156967,"ow":90688,"aq":41182,"ot":3326,"an":246656,"io":2286,"bo":37827}],"distinctIps":1934004,"botTotal":2609707};
+
+(function renderSpikeTracing(){
+  const BH = SPIKE.byHour, BM = SPIKE.byMin, n = BH.length;
+  const svg = document.getElementById('spk-svg');
+  if (!svg) return;
+  const C = {iq:'#4a9eff', ow:'#f0a830', aq:'#a78bfa', ot:'#5a6a7e', an:'#4a9eff', io:'#34c770', bo:'#ff4d5a', hu:'#34c770'};
+
+  // ---- baseline (trung vị) cho từng thành phần ----
+  const med = key => { const a = BH.map(h=>h[key]).slice().sort((x,y)=>x-y); return a[Math.floor(a.length/2)]; };
+  const median = med('t'), medIq = med('iq'), medOw = med('ow'), medAq = med('aq'), medOt = med('ot'), medNi = med('ni');
+
+  // ---- cấu hình các chiều phân rã (lớp xếp chồng từ dưới lên) ----
+  const DIM = {
+    ep:   [ {k:'iq',label:'iqair.php',color:C.iq, get:h=>h.iq},
+            {k:'ow',label:'owm.php',color:C.ow, get:h=>h.ow},
+            {k:'aq',label:'airquality.php',color:C.aq, get:h=>h.aq},
+            {k:'ot',label:'khác',color:C.ot, get:h=>h.ot} ],
+    plat: [ {k:'an',label:'Android',color:C.an, get:h=>h.an},
+            {k:'io',label:'iOS',color:C.io, get:h=>h.io},
+            {k:'bo',label:'Bot/Server',color:C.bo, get:h=>h.bo},
+            {k:'ot',label:'Khác',color:C.ot, get:h=>Math.max(0,h.t-h.an-h.io-h.bo)} ],
+    bot:  [ {k:'hu',label:'Người dùng thật',color:C.hu, get:h=>Math.max(0,h.t-h.bo)},
+            {k:'bo',label:'Bot / Server',color:C.bo, get:h=>h.bo} ],
+  };
+
+  const W=1000, H=220, PAD={top:18,right:16,bottom:34,left:52};
+  const innerW=W-PAD.left-PAD.right, innerH=H-PAD.top-PAD.bottom;
+  const xScale = i => PAD.left + (i/(n-1))*innerW;
+  const maxTotal = Math.max(...BH.map(h=>h.t));
+  const yScale = v => PAD.top + innerH - (v/maxTotal)*innerH;
+  const days = ['06-24','06-25','06-26','06-27','06-28','06-29'];
+
+  function drawStack(dim){
+    const layers = DIM[dim];
+    let html = '';
+    for(let k=0;k<=4;k++){
+      const y=PAD.top+(k/4)*innerH, val=Math.round(maxTotal*(1-k/4)/1000);
+      html+=`<line x1="${PAD.left}" x2="${W-PAD.right}" y1="${y}" y2="${y}" stroke="#243045" stroke-width="0.5"/>`;
+      if(k<4) html+=`<text x="${PAD.left-6}" y="${y+4}" text-anchor="end" fill="#5a6a7e" font-size="9" font-family="Courier New">${val}K</text>`;
+    }
+    days.forEach(day=>{
+      const idx=BH.findIndex(h=>h.ts.startsWith(day)); if(idx<0) return;
+      const x=xScale(idx);
+      html+=`<line x1="${x}" x2="${x}" y1="${PAD.top}" y2="${PAD.top+innerH}" stroke="#2a3a52" stroke-width="1" stroke-dasharray="2 4"/>`;
+      html+=`<text x="${x+3}" y="${PAD.top+innerH+22}" fill="#5a6a7e" font-size="9" font-family="Courier New">${day}</text>`;
+    });
+    let prev = new Array(n).fill(0);
+    layers.forEach(layer=>{
+      const cum = BH.map((h,i)=>prev[i]+layer.get(h));
+      let p = `M ${xScale(0)} ${yScale(cum[0])}`;
+      for(let i=1;i<n;i++) p+=` L ${xScale(i)} ${yScale(cum[i])}`;
+      for(let i=n-1;i>=0;i--) p+=` L ${xScale(i)} ${yScale(prev[i])}`;
+      p+=' Z';
+      html+=`<path d="${p}" fill="${layer.color}" fill-opacity="0.78" stroke="${layer.color}" stroke-width="0.4"/>`;
+      prev = cum;
+    });
+    for(let i=0;i<n;i++){
+      const x=xScale(i)-innerW/(2*(n-1));
+      html+=`<rect class="spk-hz" data-i="${i}" x="${x}" y="${PAD.top}" width="${innerW/(n-1)}" height="${innerH}" fill="transparent" style="cursor:crosshair"/>`;
+    }
+    svg.innerHTML = html;
+    document.getElementById('spk-legend').innerHTML = layers.map(l=>`<span class="spk-legend-item"><span class="spk-swatch" style="background:${l.color}"></span>${l.label}</span>`).join('');
+    const tip=document.getElementById('spk-tip'), wrap=document.getElementById('spk-wrap');
+    svg.querySelectorAll('.spk-hz').forEach(z=>{
+      z.addEventListener('mousemove',()=>{
+        const i=+z.dataset.i, h=BH[i];
+        const rows=layers.map(l=>{const v=l.get(h);return `<div style="display:flex;justify-content:space-between;gap:14px"><span style="color:${l.color}">${l.label}</span><span>${fmtFull(v)} · ${(v/h.t*100).toFixed(0)}%</span></div>`;}).join('');
+        tip.innerHTML=`<div class="tt-ts">${h.ts} UTC</div><div style="margin:3px 0;color:var(--text)">Tổng: ${fmtFull(h.t)}</div>${rows}<div style="margin-top:3px;color:var(--purple)">IP mới: ${fmtFull(h.ni)}</div>`;
+        const rect=wrap.getBoundingClientRect(), svgRect=svg.getBoundingClientRect();
+        let left=svgRect.left-rect.left+(xScale(i)/W)*svgRect.width+8;
+        if(left+185>rect.width) left-=195;
+        tip.style.left=left+'px'; tip.style.top='8px'; tip.style.opacity='1';
+      });
+      z.addEventListener('mouseleave',()=>{ tip.style.opacity='0'; });
+    });
+  }
+  document.querySelectorAll('#spk-toggle button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('#spk-toggle button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      drawStack(b.dataset.dim);
+    });
+  });
+  drawStack('ep');
+
+  // ---- Bảng phân rã spike tự động ----
+  const EPN={iq:'iqair.php',ow:'owm.php',aq:'airquality.php',ot:'khác'};
+  const spikes = BH.filter(h=>h.t>median*1.25).sort((a,b)=>b.t-a.t);
+  document.getElementById('spk-tbody').innerHTML = spikes.map(h=>{
+    const exc=h.t-median;
+    const d={iq:h.iq-medIq, ow:h.ow-medOw, aq:h.aq-medAq, ot:h.ot-medOt};
+    let best='iq'; for(const k in d) if(d[k]>d[best]) best=k;
+    const pct=Math.round(d[best]/exc*100);
+    const overPct=Math.round((h.t/median-1)*100);
+    const hot=h.ni>medNi*2;
+    return `<tr><td class="dim">${h.ts}</td><td class="jun">${fmtFull(h.t)}</td>`
+      +`<td style="color:var(--warn)">+${overPct}% · ×${(h.t/median).toFixed(2)}</td>`
+      +`<td><span class="spk-culprit-tag" style="background:${EPN[best]==='owm.php'?'rgba(240,168,48,.18)':'rgba(74,158,255,.18)'};color:${C[best]}">${EPN[best]} +${fmtFull(d[best])} (${pct}%)</span></td>`
+      +`<td style="color:${hot?'var(--purple)':'var(--muted)'}">${fmtFull(h.ni)}${hot?' ▲':''}</td></tr>`;
+  }).join('');
+  document.getElementById('spk-median').textContent = fmtFull(median);
+  document.getElementById('spk-tbl-badge').textContent = spikes.length + ' giờ vượt ngưỡng';
+
+  // ---- Phân rã herd theo phút (cột chồng) ----
+  function drawMinStack(boxId, lblId, legId, layers){
+    const max=Math.max(...BM.map(m=>m.t)), STACK_H=120;
+    let cols='';
+    BM.forEach((m,mm)=>{
+      let segs='';
+      layers.forEach(l=>{ const v=l.get(m); segs+=`<div class="seg" style="height:${(v/max*STACK_H).toFixed(2)}px;background:${l.color}"></div>`; });
+      const detail=layers.map(l=>`${l.label} ${fmtFull(l.get(m))}`).join(' · ');
+      cols+=`<div class="spk-col" title=":${String(mm).padStart(2,'0')} — tổng ${fmtFull(m.t)} · ${detail}">${segs}</div>`;
+    });
+    document.getElementById(boxId).innerHTML = cols;
+    let lbl=''; for(let mm=0;mm<60;mm++) lbl+=`<div class="min-x-label" style="${mm===0?'color:var(--danger)':mm===30?'color:var(--warn)':''}">${(mm%10===0||mm===30)?':'+String(mm).padStart(2,'0'):''}</div>`;
+    document.getElementById(lblId).innerHTML = lbl;
+    document.getElementById(legId).innerHTML = layers.map(l=>`<span class="spk-legend-item"><span class="spk-swatch" style="background:${l.color}"></span>${l.label}</span>`).join('');
+  }
+  drawMinStack('spk-min-ep','spk-min-ep-lbl','spk-min-ep-leg',
+    [{label:'iqair.php',color:C.iq,get:m=>m.iq},{label:'owm.php',color:C.ow,get:m=>m.ow},{label:'airquality.php',color:C.aq,get:m=>m.aq},{label:'khác',color:C.ot,get:m=>m.ot}]);
+  drawMinStack('spk-min-plat','spk-min-plat-lbl','spk-min-plat-leg',
+    [{label:'Android',color:C.an,get:m=>m.an},{label:'iOS',color:C.io,get:m=>m.io},{label:'Bot/Server',color:C.bo,get:m=>m.bo},{label:'Khác',color:C.ot,get:m=>Math.max(0,m.t-m.an-m.io-m.bo)}]);
+
+  // ---- IP mới theo giờ ----
+  (function(){
+    const ipsvg=document.getElementById('spk-ip-svg'); if(!ipsvg) return;
+    const w=1000,hh=160,pad={top:16,right:16,bottom:30,left:50};
+    const iW=w-pad.left-pad.right, iH=hh-pad.top-pad.bottom;
+    const xs=i=>pad.left+(i/(n-1))*iW;
+    const mx=Math.max(...BH.map(h=>h.ni));
+    const ys=v=>pad.top+iH-(v/mx*iH);
+    let html='';
+    for(let k=0;k<=3;k++){ const y=pad.top+(k/3)*iH, val=Math.round(mx*(1-k/3)/1000);
+      html+=`<line x1="${pad.left}" x2="${w-pad.right}" y1="${y}" y2="${y}" stroke="#243045" stroke-width="0.5"/>`;
+      if(k<3) html+=`<text x="${pad.left-6}" y="${y+4}" text-anchor="end" fill="#5a6a7e" font-size="9" font-family="Courier New">${val}K</text>`; }
+    days.forEach(day=>{ const idx=BH.findIndex(h=>h.ts.startsWith(day)); if(idx<0) return; const x=xs(idx);
+      html+=`<line x1="${x}" x2="${x}" y1="${pad.top}" y2="${pad.top+iH}" stroke="#2a3a52" stroke-width="1" stroke-dasharray="2 4"/>`;
+      html+=`<text x="${x+3}" y="${pad.top+iH+20}" fill="#5a6a7e" font-size="9" font-family="Courier New">${day}</text>`; });
+    const bw=iW/n*0.66;
+    BH.forEach((h,i)=>{ const y=ys(h.ni), bh2=pad.top+iH-y, is13=h.ts.endsWith('13:00');
+      html+=`<rect x="${(xs(i)-bw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh2.toFixed(1)}" fill="${is13?'#a78bfa':'#4a9eff'}" fill-opacity="${is13?0.95:0.5}"><title>${h.ts} UTC — ${fmtFull(h.ni)} IP mới</title></rect>`; });
+    ipsvg.innerHTML=html;
+    document.getElementById('spk-ip-legend').innerHTML=`<span class="spk-legend-item"><span class="spk-swatch" style="background:#a78bfa"></span>Giờ 13:00 (đỉnh IP mới)</span><span class="spk-legend-item"><span class="spk-swatch" style="background:#4a9eff"></span>Các giờ khác</span>`;
+    const h13=BH.filter(h=>h.ts.endsWith('13:00'));
+    const peak13=Math.round(h13.reduce((s,h)=>s+h.ni,0)/h13.length);
+    document.getElementById('spk-ip-note').innerHTML=`Mỗi cột = số IP <strong>lần đầu xuất hiện</strong> trong giờ đó. Nền ~<code>${fmtFull(medNi)}</code>/giờ nhưng vọt lên ~<code>${fmtFull(peak13)}</code> đúng <code style="color:var(--purple)">13:00</code> mỗi ngày → mỗi spike 13:00 kéo theo một đợt <strong>thiết bị mới</strong>, KHÔNG phải bot (bot chỉ là 1 IP cố định). Tổng IP duy nhất 5 ngày: <code>${fmtFull(SPIKE.distinctIps)}</code>.`;
+  })();
+
+  // ---- Kết luận tự động (callout) ----
+  const avgMin=(a,b,key)=>{ let s=0; for(let m=a;m<=b;m++) s+=BM[m][key]; return s/(b-a+1); };
+  const m0=BM[0], bT=avgMin(10,29,'t'), bIq=avgMin(10,29,'iq'), bOw=avgMin(10,29,'ow'), bAn=avgMin(10,29,'an');
+  const herdX=(m0.t/bT).toFixed(2), herdExc=m0.t-bT;
+  const herdIqPct=Math.round((m0.iq-bIq)/herdExc*100), herdOwPct=Math.round((m0.ow-bOw)/herdExc*100), herdAnPct=Math.round((m0.an-bAn)/herdExc*100);
+  const h13=BH.filter(h=>h.ts.endsWith('13:00'));
+  const avg13=k=>Math.round(h13.reduce((s,h)=>s+h[k],0)/h13.length);
+  const t13=avg13('t'), iq13=avg13('iq'), ni13=avg13('ni'), exc13=t13-median;
+  const over13=Math.round((t13/median-1)*100), iq13pct=Math.round((iq13-medIq)/exc13*100), ni13pct=Math.round((ni13-medNi)/exc13*100);
+  const bos=BH.map(h=>h.bo), botMin=Math.min(...bos), botMax=Math.max(...bos);
+  document.getElementById('spk-callout').innerHTML =
+    `<div class="spk-callout"><div class="spk-callout-title">🎯 Kết luận tự động — spike đến từ đâu (tính trực tiếp từ ${fmtFull(SPIKE.byHour.reduce((s,h)=>s+h.t,0))} request)</div><ul>`
+    +`<li><strong>Spike :00 mỗi giờ (×${herdX} đỉnh):</strong> app Android đồng bộ gọi đúng đầu giờ — phần dư gồm <code>iqair.php</code> ${herdIqPct}% + <code>owm.php</code> ${herdOwPct}%, ~${herdAnPct}% là Android. Bot &amp; iOS gần như KHÔNG góp phần. Đây là "Thundering Herd" phía client.</li>`
+    +`<li><strong>Spike 13:00 mỗi ngày (~+${over13}%):</strong> do <strong>đợt người dùng Android MỚI</strong> gọi <code>iqair.php</code> — ${iq13pct}% phần dư là iqair, ~${ni13pct}% phần dư đến từ IP lần đầu xuất hiện (~${fmtFull(ni13)} IP mới/giờ so với nền ~${fmtFull(medNi)}). KHÔNG do owm, KHÔNG do bot. Dấu hiệu một sự kiện định kỳ hằng ngày (push/đẩy nội dung) lúc 13:00 UTC ≈ 20:00 giờ VN.</li>`
+    +`<li><strong>Bot <code>104.131.114.164</code>:</strong> ${fmtFull(botMin)}–${fmtFull(botMax)} req/giờ, gần như phẳng cả ngày → chỉ NÂNG baseline (~13% tổng lưu lượng), KHÔNG tạo spike.</li>`
+    +`<li><strong>Bump 01:00 &amp; 05:00:</strong> cùng "vân tay" với 13:00 (iqair + Android + nhiều IP mới) nhưng mức nhỏ hơn.</li>`
+    +`</ul></div>`;
+})();
+
+// ============================================================
+// GIẢI PHẪU SPIKE 13:00 (PHẦN 3) — do app Android hay do backend?
+// ============================================================
+const SPIKE13 = {
+  day:"26/06/2026",
+  min13:[9050,9058,7928,6871,6464,5920,5563,5948,6177,6802,6228,5697,4980,4661,4444,4319,4302,3764,3892,3784,3700,3398,3555,3278,3254,3306,3239,3337,3277,3132,4059,4119,4083,3939,3785,3442,3372,3203,3180,3470,3170,3068,3071,3186,3110,3262,3158,2926,2807,2964,2903,2818,2954,2807,2839,2921,2988,2862,2725,2980],
+  minBase:[7161,4631,3976,3537,3183,3267,3203,3178,3102,2974,2859,2983,3021,2788,3174,3302,3117,3086,2873,2953,2879,2736,2971,2794,2949,2721,2709,3004,2815,2620,4577,4155,3771,4242,3286,3014,3023,2867,3019,3355,2824,2768,2860,2977,2725,2839,2829,3031,2909,2940,2849,2723,2617,2657,2680,2614,2643,2794,2707,2564],
+  sec00:[58,62,87,100,117,124,139,145,136,133,150,136,162,189,168,169,135,130,162,138,178,198,148,164,130,142,148,159,171,146,177,145,144,158,150,169,158,144,158,142,143,164,172,166,119,156,118,170,174,162,214,193,169,166,145,176,174,166,173,161],
+  histLabels:["1","2","3-5","6-10",">10"],
+  h13:[38.22,33.88,22.68,4.5,0.72], h14:[17.58,34.67,39.25,7.47,1.04],
+  total13:245499, total14:187425
+};
+(function renderSpike13(){
+  const S = SPIKE13;
+  // ---- (1) Đường nhịp trong giờ: 13:00 vs nền 14:00 ----
+  (function(){
+    const svg = document.getElementById('spk13-svg'); if(!svg) return;
+    const W=1000,H=200,PAD={top:16,right:16,bottom:26,left:46};
+    const iW=W-PAD.left-PAD.right, iH=H-PAD.top-PAD.bottom, n=60;
+    const mx=Math.max(...S.min13,...S.minBase);
+    const xs=i=>PAD.left+(i/(n-1))*iW, ys=v=>PAD.top+iH-(v/mx)*iH;
+    let h='';
+    for(let k=0;k<=4;k++){ const y=PAD.top+(k/4)*iH, val=Math.round(mx*(1-k/4)/1000);
+      h+=`<line x1="${PAD.left}" x2="${W-PAD.right}" y1="${y}" y2="${y}" stroke="#243045" stroke-width="0.5"/>`;
+      if(k<4) h+=`<text x="${PAD.left-6}" y="${y+4}" text-anchor="end" fill="#5a6a7e" font-size="9" font-family="Courier New">${val}K</text>`;
+    }
+    for(let m=0;m<60;m+=10) h+=`<text x="${xs(m)}" y="${PAD.top+iH+16}" fill="#5a6a7e" font-size="9" font-family="Courier New" text-anchor="middle">:${String(m).padStart(2,'0')}</text>`;
+    let ar=`M ${xs(0)} ${PAD.top+iH}`; S.min13.forEach((v,i)=>{ ar+=` L ${xs(i)} ${ys(v)}`; }); ar+=` L ${xs(n-1)} ${PAD.top+iH} Z`;
+    h+=`<defs><linearGradient id="s13grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a9eff" stop-opacity="0.22"/><stop offset="100%" stop-color="#4a9eff" stop-opacity="0"/></linearGradient></defs>`;
+    h+=`<path d="${ar}" fill="url(#s13grad)"/>`;
+    let lp=''; S.min13.forEach((v,i)=>{ lp+=(i?'L':'M')+` ${xs(i)} ${ys(v)}`; });
+    h+=`<path d="${lp}" fill="none" stroke="#4a9eff" stroke-width="1.6" stroke-linejoin="round"/>`;
+    let bp=''; S.minBase.forEach((v,i)=>{ bp+=(i?'L':'M')+` ${xs(i)} ${ys(v)}`; });
+    h+=`<path d="${bp}" fill="none" stroke="#5a6a7e" stroke-width="1.2" stroke-dasharray="4 3" stroke-linejoin="round"/>`;
+    S.min13.forEach((v,i)=>{ const x=xs(i)-iW/(2*(n-1));
+      h+=`<rect class="s13hz" data-i="${i}" x="${x}" y="${PAD.top}" width="${iW/(n-1)}" height="${iH}" fill="transparent" style="cursor:crosshair"/>`; });
+    svg.innerHTML=h;
+    const tip=document.getElementById('spk13-tip'), wrap=document.getElementById('spk13-wrap');
+    svg.querySelectorAll('.s13hz').forEach(z=>{
+      z.addEventListener('mousemove', ()=>{
+        const i=parseInt(z.dataset.i), a=S.min13[i], b=S.minBase[i], d=a-b;
+        const r=wrap.getBoundingClientRect(), sr=svg.getBoundingClientRect();
+        let left=sr.left-r.left+(xs(i)/W)*sr.width+8; if(left+160>r.width) left-=168;
+        tip.style.left=left+'px'; tip.style.top='8px'; tip.style.opacity='1';
+        tip.innerHTML=`<div style="color:#c9d4e0">Phút :${String(i).padStart(2,'0')}</div>`
+          +`<div style="color:#4a9eff">13:00 → ${fmtFull(a)}</div>`
+          +`<div style="color:#8a97a8">nền 14:00 → ${fmtFull(b)}</div>`
+          +`<div style="color:${d>0?'#f0a830':'#5a6a7e'}">chênh ${d>0?'+':''}${fmtFull(d)}</div>`;
+      });
+      z.addEventListener('mouseleave', ()=>{ tip.style.opacity='0'; });
+    });
+    const leg=document.getElementById('spk13-legend');
+    if(leg) leg.innerHTML=`<span class="spk-legend-item"><span class="spk-swatch" style="background:#4a9eff"></span>Giờ 13:00 (spike)</span><span class="spk-legend-item"><span class="spk-swatch" style="background:#5a6a7e"></span>Giờ 14:00 (nền)</span>`;
+  })();
+  // ---- (2) Histogram số request mỗi IP: 13:00 vs nền ----
+  (function(){
+    const box=document.getElementById('spk13-hist'); if(!box) return;
+    const mx=Math.max(...S.h13,...S.h14);
+    let bars='', xl='';
+    S.histLabels.forEach((lb,i)=>{
+      const a=S.h13[i], b=S.h14[i];
+      bars+=`<div class="spk13-hgrp">`
+        +`<div class="spk13-hbar" style="height:${(a/mx*100).toFixed(1)}%;background:#4a9eff" title="13:00 · ${lb} req: ${a}% số IP"></div>`
+        +`<div class="spk13-hbar" style="height:${(b/mx*100).toFixed(1)}%;background:#5a6a7e" title="14:00 nền · ${lb} req: ${b}% số IP"></div>`
+        +`</div>`;
+      xl+=`<div class="spk13-hxl">${lb} req</div>`;
+    });
+    box.innerHTML=bars;
+    document.getElementById('spk13-histx').innerHTML=xl;
+    const leg=document.getElementById('spk13-hist-leg');
+    if(leg) leg.innerHTML=`<span class="spk-legend-item"><span class="spk-swatch" style="background:#4a9eff"></span>Giờ 13:00</span><span class="spk-legend-item"><span class="spk-swatch" style="background:#5a6a7e"></span>Giờ 14:00 (nền)</span>`;
+  })();
+  // ---- (3) Nhịp theo từng giây của phút 13:00:00 ----
+  (function(){
+    const box=document.getElementById('spk13-sec'); if(!box) return;
+    const arr=S.sec00, mx=Math.max(...arr), pk=arr.indexOf(mx);
+    let bars='';
+    arr.forEach((v,s)=>{
+      const hh=Math.round(v/mx*100);
+      const col = s===0 ? '#ff4d5a' : (s===pk ? '#34c770' : '#4a9eff');
+      bars+=`<div class="min-bar" style="height:${hh}%;background:${col}" title="giây :${String(s).padStart(2,'0')} — ${v} req"></div>`;
+    });
+    box.innerHTML=bars;
+    let xl=''; for(let s=0;s<60;s++) xl+=`<div class="min-x-label" style="${s===0?'color:var(--danger)':''}">${s%10===0?':'+String(s).padStart(2,'0'):''}</div>`;
+    document.getElementById('spk13-sec-lbl').innerHTML=xl;
+  })();
+})();
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).style.display = '';
+    if (btn.dataset.tab === 'logs' && !LV.initialized) initLogViewer();
+    if (btn.dataset.tab === 'insights' && !INS.done) { initInsights(); INS.done = true; }
+  });
+});
+
+// ============================================================
+// LOG VIEWER
+// ============================================================
+const LV = {
+  initialized: false,
+  errorRows: [],
+  accessRows: [],
+  currentSubTab: 'error',
+  searchText: '',
+  filterLevel: '',
+  filterModule: '',
+  filterStatus: '',
+  pageSize: 150,
+  pageOffset: 0,
+  loading: false,
+  fileProgress: {},  // filename → {loaded, total, found, done}
+};
+
+const ERROR_FILES = ['error.log','error.log.1','error.log.2_20260627','error.log.3_20260626','error.log.4_20260625'];
+const ACCESS_FILES = ['other_vhosts_access.log','other_vhosts_access.log.1','other_vhosts_access.log.2_20260627','other_vhosts_access.log.3_20260626','other_vhosts_access.log.4_20260625'];
+
+// Regex parsers
+const ERR_RE = /^\[([^\]]+)\]\s+\[(\w*):(\w+)\]\s+\[pid\s+(\d+)\](?:\s+\[client\s+([^\]]+)\])?\s+(.*)/;
+const ACC_RE = /^(\S+)\s+(\S+)\s+\S+\s+\S+\s+\[([^\]]+)\]\s+"(\S+)\s+(\S+)[^"]*"\s+(\d+)\s+(\S+)(?:\s+"[^"]*")?\s+"([^"]*)"/;
+
+function parseErrorLine(line) {
+  const m = line.match(ERR_RE);
+  if (!m) return null;
+  const msg = m[6] || '';
+  const codeM = msg.match(/^(AH\d+):\s*(.*)/s);
+  return {
+    time: m[1], module: m[2], level: m[3].toLowerCase(), pid: m[4],
+    client: (m[5] || '').replace(/:\d+$/, ''),
+    code: codeM ? codeM[1] : '',
+    message: codeM ? codeM[2] : msg
+  };
+}
+
+function parseAccessLine(line) {
+  const m = line.match(ACC_RE);
+  if (!m) return null;
+  return {
+    host: m[1], ip: m[2], time: m[3],
+    method: m[4], path: m[5],
+    status: parseInt(m[6]), bytes: m[7], ua: m[8] || ''
+  };
+}
+
+async function* streamLines(readable) {
+  const reader = readable.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) { if (buf.trim()) yield buf; break; }
+    buf += decoder.decode(value, { stream: true });
+    const nl = buf.lastIndexOf('\n');
+    if (nl === -1) continue;
+    const lines = buf.slice(0, nl).split('\n');
+    buf = buf.slice(nl + 1);
+    for (const line of lines) if (line.trim()) yield line;
+  }
+}
+
+function initLogViewer() {
+  LV.initialized = true;
+  const isServer = location.protocol.startsWith('http');
+  renderLogRoot(isServer ? 'server' : 'filepicker');
+  if (isServer) startServerLoad();
+}
+
+function renderLogRoot(mode) {
+  const root = document.getElementById('lv-root');
+  if (mode === 'filepicker') {
+    root.innerHTML = `
+      <div class="lv-warn-bar">⚠ Đang mở qua <code>file://</code> — chọn hoặc kéo file log vào bên dưới</div>
+      <div class="lv-dropzone" id="lv-drop">
+        <div class="lv-dropzone-icon">📂</div>
+        <div>Kéo &amp; thả file log vào đây</div>
+        <div class="lv-dropzone-hint">
+          Chấp nhận: <code>error.log*</code>, <code>other_vhosts_access.log*</code><br>
+          hoặc <label for="lv-file-input">click để chọn file</label>
+          <input type="file" id="lv-file-input" multiple accept=".log,.log.*,*">
+        </div>
+      </div>
+      <div id="lv-viewer" style="display:none">
+        ${renderViewerShell()}
+      </div>`;
+    setupFilePicker();
+  } else {
+    root.innerHTML = `
+      <div id="lv-progress-wrap">${renderProgressShell()}</div>
+      <div id="lv-viewer">
+        ${renderViewerShell()}
+      </div>`;
+  }
+  setupViewerControls();
+}
+
+function renderProgressShell() {
+  return `<div class="lv-progress" id="lv-progress">
+    <div class="lv-progress-label" id="lv-progress-label">Đang kết nối...</div>
+    <div class="lv-progress-list" id="lv-progress-list"></div>
+  </div>`;
+}
+
+function renderViewerShell() {
+  return `
+    <div class="lv-subtabs" id="lv-subtabs">
+      <button class="lv-stab active" data-stab="error">Error Logs <span class="badge" id="badge-error">0</span></button>
+      <button class="lv-stab" data-stab="access">Access Errors <span class="badge" id="badge-access">0</span></button>
+    </div>
+    <div class="lv-stat-bar" id="lv-stat-bar"></div>
+    <div class="lv-controls">
+      <input class="lv-search" id="lv-search" type="text" placeholder="Tìm kiếm: IP, message, path, module...">
+      <select class="lv-select" id="lv-filter-level" title="Lọc theo level (error log)">
+        <option value="">Tất cả level</option>
+        <option value="error">error</option>
+        <option value="warn">warn</option>
+        <option value="notice">notice</option>
+      </select>
+      <select class="lv-select" id="lv-filter-status" title="Lọc theo HTTP status (access log)">
+        <option value="">Tất cả status</option>
+        <option value="4xx">4xx</option>
+        <option value="5xx">5xx</option>
+        <option value="3xx">3xx</option>
+        <option value="2xx">2xx</option>
+      </select>
+      <button class="lv-btn" id="lv-clear-btn">Xóa filter</button>
+    </div>
+    <div class="lv-table-wrap" id="lv-table-wrap">
+      <div class="lv-empty"><div class="lv-empty-icon">⏳</div>Đang tải log...</div>
+    </div>
+    <div class="lv-footer">
+      <span id="lv-footer-info">–</span>
+      <div style="display:flex;gap:8px">
+        <button class="lv-btn" id="lv-prev-btn" disabled>◀ Trước</button>
+        <button class="lv-btn" id="lv-next-btn" disabled>Tiếp ▶</button>
+      </div>
+    </div>`;
+}
+
+function setupViewerControls() {
+  // Sub-tab switching
+  document.querySelectorAll('.lv-stab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.lv-stab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      LV.currentSubTab = btn.dataset.stab;
+      LV.pageOffset = 0;
+      renderTable();
+    });
+  });
+
+  // Search
+  const searchEl = document.getElementById('lv-search');
+  if (searchEl) {
+    let searchTimer;
+    searchEl.addEventListener('input', e => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        LV.searchText = e.target.value.toLowerCase();
+        LV.pageOffset = 0;
+        renderTable();
+      }, 200);
+    });
+  }
+
+  // Level filter
+  const levelEl = document.getElementById('lv-filter-level');
+  if (levelEl) levelEl.addEventListener('change', e => { LV.filterLevel = e.target.value; LV.pageOffset = 0; renderTable(); });
+
+  // Status filter
+  const statusEl = document.getElementById('lv-filter-status');
+  if (statusEl) statusEl.addEventListener('change', e => { LV.filterStatus = e.target.value; LV.pageOffset = 0; renderTable(); });
+
+  // Clear
+  const clearBtn = document.getElementById('lv-clear-btn');
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    LV.searchText = ''; LV.filterLevel = ''; LV.filterStatus = '';
+    const s = document.getElementById('lv-search'); if(s) s.value = '';
+    const l = document.getElementById('lv-filter-level'); if(l) l.value = '';
+    const st = document.getElementById('lv-filter-status'); if(st) st.value = '';
+    LV.pageOffset = 0; renderTable();
+  });
+
+  // Pagination
+  const prevBtn = document.getElementById('lv-prev-btn');
+  const nextBtn = document.getElementById('lv-next-btn');
+  if (prevBtn) prevBtn.addEventListener('click', () => { LV.pageOffset = Math.max(0, LV.pageOffset - LV.pageSize); renderTable(); });
+  if (nextBtn) nextBtn.addEventListener('click', () => { LV.pageOffset += LV.pageSize; renderTable(); });
+}
+
+function getFilteredRows() {
+  const rows = LV.currentSubTab === 'error' ? LV.errorRows : LV.accessRows;
+  return rows.filter(r => {
+    if (LV.searchText) {
+      const haystack = LV.currentSubTab === 'error'
+        ? `${r.time} ${r.module} ${r.level} ${r.client} ${r.code} ${r.message}`.toLowerCase()
+        : `${r.time} ${r.ip} ${r.method} ${r.path} ${r.status} ${r.ua}`.toLowerCase();
+      if (!haystack.includes(LV.searchText)) return false;
+    }
+    if (LV.currentSubTab === 'error' && LV.filterLevel && r.level !== LV.filterLevel) return false;
+    if (LV.currentSubTab === 'access' && LV.filterStatus) {
+      const s = r.status;
+      if (LV.filterStatus === '4xx' && (s < 400 || s >= 500)) return false;
+      if (LV.filterStatus === '5xx' && (s < 500 || s >= 600)) return false;
+      if (LV.filterStatus === '3xx' && (s < 300 || s >= 400)) return false;
+      if (LV.filterStatus === '2xx' && (s < 200 || s >= 300)) return false;
+    }
+    return true;
+  });
+}
+
+function statusBadge(s) {
+  const cls = s >= 500 ? 'lv-s5xx' : s >= 400 ? 'lv-s4xx' : s >= 300 ? 'lv-s3xx' : 'lv-s2xx';
+  return `<span class="lv-badge ${cls}">${s}</span>`;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderTable() {
+  const wrap = document.getElementById('lv-table-wrap');
+  if (!wrap) return;
+
+  const filtered = getFilteredRows();
+  const total = filtered.length;
+  const start = LV.pageOffset;
+  const end = Math.min(start + LV.pageSize, total);
+  const page = filtered.slice(start, end);
+
+  // Footer
+  const footerEl = document.getElementById('lv-footer-info');
+  if (footerEl) footerEl.textContent = total === 0 ? 'Không có kết quả' : `Hiển thị ${start+1}–${end} / ${fmtFull(total)} entries`;
+
+  // Pagination buttons
+  const prevBtn = document.getElementById('lv-prev-btn');
+  const nextBtn = document.getElementById('lv-next-btn');
+  if (prevBtn) prevBtn.disabled = start === 0;
+  if (nextBtn) nextBtn.disabled = end >= total;
+
+  // Stat bar
+  const statBar = document.getElementById('lv-stat-bar');
+  if (statBar) {
+    if (LV.currentSubTab === 'error') {
+      const errCount = LV.errorRows.filter(r=>r.level==='error').length;
+      const warnCount = LV.errorRows.filter(r=>r.level==='warn').length;
+      const noticeCount = LV.errorRows.filter(r=>r.level==='notice').length;
+      statBar.innerHTML = `
+        <div class="lv-stat-chip">Tổng: <span>${fmtFull(LV.errorRows.length)}</span></div>
+        <div class="lv-stat-chip" style="color:var(--danger)">error: <span>${fmtFull(errCount)}</span></div>
+        <div class="lv-stat-chip" style="color:var(--warn)">warn: <span>${fmtFull(warnCount)}</span></div>
+        <div class="lv-stat-chip">notice: <span>${fmtFull(noticeCount)}</span></div>`;
+    } else {
+      const c4 = LV.accessRows.filter(r=>r.status>=400&&r.status<500).length;
+      const c5 = LV.accessRows.filter(r=>r.status>=500).length;
+      const c3 = LV.accessRows.filter(r=>r.status>=300&&r.status<400).length;
+      statBar.innerHTML = `
+        <div class="lv-stat-chip">Tổng non-200: <span>${fmtFull(LV.accessRows.length)}</span></div>
+        <div class="lv-stat-chip" style="color:var(--warn)">4xx: <span>${fmtFull(c4)}</span></div>
+        <div class="lv-stat-chip" style="color:var(--danger)">5xx: <span>${fmtFull(c5)}</span></div>
+        <div class="lv-stat-chip" style="color:var(--accent)">3xx: <span>${fmtFull(c3)}</span></div>`;
+    }
+  }
+
+  if (total === 0) {
+    const src = LV.currentSubTab === 'error' ? LV.errorRows.length : LV.accessRows.length;
+    wrap.innerHTML = src === 0
+      ? `<div class="lv-empty"><div class="lv-empty-icon">⏳</div>Chưa có dữ liệu — đang tải...</div>`
+      : `<div class="lv-empty"><div class="lv-empty-icon">🔍</div>Không tìm thấy kết quả phù hợp</div>`;
+    return;
+  }
+
+  if (LV.currentSubTab === 'error') {
+    wrap.innerHTML = `<table class="lv-table">
+      <thead><tr>
+        <th style="width:170px">Thời gian</th>
+        <th style="width:70px">Level</th>
+        <th style="width:130px">Module</th>
+        <th style="width:130px">Client IP</th>
+        <th style="width:80px">Code</th>
+        <th>Message</th>
+      </tr></thead>
+      <tbody>${page.map(r => {
+        const rowCls = r.level === 'error' ? 'lv-row-err' : r.level === 'warn' ? 'lv-row-warn' : 'lv-row-notice';
+        const levelColor = r.level === 'error' ? 'var(--danger)' : r.level === 'warn' ? 'var(--warn)' : 'var(--muted)';
+        return `<tr class="${rowCls}">
+          <td style="color:var(--muted);font-size:10px">${esc(r.time)}</td>
+          <td style="color:${levelColor};font-weight:700">${esc(r.level)}</td>
+          <td style="color:var(--accent)">${esc(r.module)}</td>
+          <td style="color:var(--text)">${esc(r.client)}</td>
+          <td style="color:var(--warn)">${esc(r.code)}</td>
+          <td class="td-msg">${esc(r.message)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  } else {
+    wrap.innerHTML = `<table class="lv-table">
+      <thead><tr>
+        <th style="width:170px">Thời gian</th>
+        <th style="width:120px">IP</th>
+        <th style="width:55px">Method</th>
+        <th style="width:260px">Path</th>
+        <th style="width:55px">Status</th>
+        <th style="width:70px">Bytes</th>
+        <th>User-Agent</th>
+      </tr></thead>
+      <tbody>${page.map(r => {
+        const s = r.status;
+        const pathColor = s >= 400 ? 'var(--danger)' : s >= 300 ? 'var(--accent)' : 'var(--text)';
+        return `<tr>
+          <td style="color:var(--muted);font-size:10px">${esc(r.time)}</td>
+          <td style="color:var(--text)">${esc(r.ip)}</td>
+          <td style="color:var(--muted)">${esc(r.method)}</td>
+          <td style="color:${pathColor};max-width:260px" title="${esc(r.path)}">${esc(r.path)}</td>
+          <td>${statusBadge(s)}</td>
+          <td style="color:var(--muted)">${esc(r.bytes)}</td>
+          <td style="color:var(--muted);font-size:10px;max-width:200px" title="${esc(r.ua)}">${esc(r.ua)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  }
+}
+
+function updateBadges() {
+  const be = document.getElementById('badge-error');
+  const ba = document.getElementById('badge-access');
+  if (be) be.textContent = LV.errorRows.length;
+  if (ba) ba.textContent = LV.accessRows.length;
+}
+
+function updateProgressUI(filename, loaded, total, found, done) {
+  LV.fileProgress[filename] = { loaded, total, found, done };
+  const listEl = document.getElementById('lv-progress-list');
+  if (!listEl) return;
+
+  const allFiles = [...ERROR_FILES, ...ACCESS_FILES];
+  const doneCount = Object.values(LV.fileProgress).filter(p => p.done).length;
+  const totalFiles = allFiles.length;
+
+  const labelEl = document.getElementById('lv-progress-label');
+  if (labelEl) {
+    if (doneCount === totalFiles) {
+      labelEl.textContent = `Hoàn tất — ${totalFiles} files · ${fmtFull(LV.errorRows.length)} error entries · ${fmtFull(LV.accessRows.length)} access entries`;
+    } else {
+      labelEl.textContent = `Đang tải... ${doneCount}/${totalFiles} files xong`;
+    }
+  }
+
+  listEl.innerHTML = allFiles.map(fname => {
+    const p = LV.fileProgress[fname];
+    if (!p) return `<div class="lv-pf"><div class="lv-pf-dot" style="background:var(--s3)"></div><div class="lv-pf-name">${fname}</div><div class="lv-pf-bar-bg"><div class="lv-pf-bar" style="background:var(--s3)"></div></div><div class="lv-pf-stat">chờ</div></div>`;
+    const pct = p.total > 0 ? Math.min(100, (p.loaded / p.total * 100)).toFixed(0) : (p.done ? 100 : 0);
+    const dotColor = p.done ? 'var(--ok)' : 'var(--accent)';
+    const barColor = p.done ? 'var(--ok)' : 'var(--accent)';
+    const statText = p.done
+      ? `${fmtFull(p.found)} entries`
+      : p.total > 0 ? `${(p.loaded/1024/1024).toFixed(1)}/${(p.total/1024/1024).toFixed(1)} MB`
+      : `${(p.loaded/1024).toFixed(0)} KB`;
+    return `<div class="lv-pf">
+      <div class="lv-pf-dot" style="background:${dotColor}"></div>
+      <div class="lv-pf-name">${fname}</div>
+      <div class="lv-pf-bar-bg"><div class="lv-pf-bar" style="width:${pct}%;background:${barColor}"></div></div>
+      <div class="lv-pf-stat">${statText}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadFileStream(filename, isError) {
+  let response;
+  try {
+    response = await fetch(filename);
+    if (!response.ok) {
+      updateProgressUI(filename, 0, 0, 0, true);
+      return;
+    }
+  } catch(e) {
+    updateProgressUI(filename, 0, 0, 0, true);
+    return;
+  }
+
+  const total = parseInt(response.headers.get('content-length') || '0');
+  let loaded = 0, found = 0;
+  let lastRender = 0;
+
+  for await (const line of streamLines(response.body)) {
+    loaded += line.length + 1;
+    if (isError) {
+      const r = parseErrorLine(line);
+      if (r) { LV.errorRows.push(r); found++; }
+    } else {
+      const r = parseAccessLine(line);
+      if (r && r.status !== 200) { LV.accessRows.push(r); found++; }
+    }
+    // Update UI every 2000 lines
+    if ((LV.errorRows.length + LV.accessRows.length) % 2000 === 0) {
+      updateProgressUI(filename, loaded, total, found, false);
+      updateBadges();
+      const now = Date.now();
+      if (now - lastRender > 800) { renderTable(); lastRender = now; }
+      await new Promise(r => setTimeout(r, 0)); // yield to browser
+    }
+  }
+  updateProgressUI(filename, loaded, total, found, true);
+  updateBadges();
+  renderTable();
+}
+
+async function startServerLoad() {
+  LV.loading = true;
+  updateProgressUI('init', 0, 0, 0, false);
+
+  // Load error files first (small, fast)
+  for (const f of ERROR_FILES) {
+    await loadFileStream(f, true);
+  }
+  // Then access files (large, streaming)
+  for (const f of ACCESS_FILES) {
+    await loadFileStream(f, false);
+  }
+  LV.loading = false;
+}
+
+// ── File picker mode ──
+function setupFilePicker() {
+  const drop = document.getElementById('lv-drop');
+  const fileInput = document.getElementById('lv-file-input');
+  if (!drop || !fileInput) return;
+
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('drag-over');
+    handleFiles(Array.from(e.dataTransfer.files));
+  });
+  fileInput.addEventListener('change', e => handleFiles(Array.from(e.target.files)));
+}
+
+async function handleFiles(files) {
+  if (!files.length) return;
+
+  const drop = document.getElementById('lv-drop');
+  const viewerEl = document.getElementById('lv-viewer');
+  if (drop) drop.style.display = 'none';
+  if (viewerEl) viewerEl.style.display = '';
+
+  // Inject progress UI before viewer
+  const root = document.getElementById('lv-root');
+  const progressDiv = document.createElement('div');
+  progressDiv.id = 'lv-progress-wrap';
+  progressDiv.innerHTML = renderProgressShell();
+  root.insertBefore(progressDiv, viewerEl);
+
+  setupViewerControls();
+  LV.loading = true;
+
+  // Sort: error files first
+  const errorFiles = files.filter(f => f.name.startsWith('error'));
+  const accessFiles = files.filter(f => f.name.startsWith('other_vhosts'));
+  const ordered = [...errorFiles, ...accessFiles];
+
+  for (const file of ordered) {
+    await loadFromFile(file, file.name.startsWith('error'));
+  }
+  LV.loading = false;
+}
+
+async function loadFromFile(file, isError) {
+  const total = file.size;
+  let loaded = 0, found = 0;
+  let lastRender = 0;
+
+  const readable = file.stream ? file.stream() : await legacyFileStream(file);
+
+  for await (const line of streamLines(readable)) {
+    loaded += line.length + 1;
+    if (isError) {
+      const r = parseErrorLine(line);
+      if (r) { LV.errorRows.push(r); found++; }
+    } else {
+      const r = parseAccessLine(line);
+      if (r && r.status !== 200) { LV.accessRows.push(r); found++; }
+    }
+    if ((LV.errorRows.length + LV.accessRows.length) % 2000 === 0) {
+      updateProgressUI(file.name, loaded, total, found, false);
+      updateBadges();
+      const now = Date.now();
+      if (now - lastRender > 800) { renderTable(); lastRender = now; }
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  updateProgressUI(file.name, loaded, total, found, true);
+  updateBadges();
+  renderTable();
+}
+
+function legacyFileStream(file) {
+  // Fallback: wrap FileReader slice-based reading as a ReadableStream
+  const CHUNK = 1024 * 1024; // 1MB chunks
+  let offset = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (offset >= file.size) { controller.close(); return; }
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        const blob = file.slice(offset, offset + CHUNK);
+        reader.onload = e => {
+          const buf = new Uint8Array(e.target.result);
+          controller.enqueue(buf);
+          offset += CHUNK;
+          resolve();
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(blob);
+      });
+    }
+  });
+}
+
+// ============================================================
+// INSIGHTS TAB — dữ liệu thật trích từ ~5GB log (20.0M dòng, 5 ngày)
+// ============================================================
+const INS = { done: false };
+
+// ── Helper render dùng chung (trích từ renderDonut/renderUA/renderMinChart) ──
+const INS_C = ['#4a9eff','#34c770','#f0a830','#a78bfa','#ff4d5a','#5a6a7e','#ff7c44','#2dd4bf'];
+function insDonut(svgId, legendId, data, centerVal, centerSub){
+  const total = data.reduce((s,d)=>s+d.count,0) || 1;
+  const cx=70, cy=70, R=55, r=35; let angle=-Math.PI/2, paths='';
+  data.forEach((d,i)=>{
+    const col=d.color||INS_C[i%INS_C.length];
+    const slice=(d.count/total)*Math.PI*2;
+    const x1=cx+R*Math.cos(angle),y1=cy+R*Math.sin(angle);
+    const x2=cx+R*Math.cos(angle+slice),y2=cy+R*Math.sin(angle+slice);
+    const x3=cx+r*Math.cos(angle+slice),y3=cy+r*Math.sin(angle+slice);
+    const x4=cx+r*Math.cos(angle),y4=cy+r*Math.sin(angle);
+    const lg=slice>Math.PI?1:0;
+    paths+=`<path d="M${x1},${y1} A${R},${R} 0 ${lg},1 ${x2},${y2} L${x3},${y3} A${r},${r} 0 ${lg},0 ${x4},${y4} Z" fill="${col}" opacity="0.9"/>`;
+    angle+=slice;
+  });
+  paths+=`<text x="${cx}" y="${cy-3}" text-anchor="middle" fill="#c9d4e0" font-size="14" font-weight="700" font-family="Courier New">${centerVal||''}</text>`;
+  paths+=`<text x="${cx}" y="${cy+11}" text-anchor="middle" fill="#5a6a7e" font-size="8" font-family="Courier New">${centerSub||''}</text>`;
+  document.getElementById(svgId).innerHTML=paths;
+  if(legendId) document.getElementById(legendId).innerHTML=data.map((d,i)=>{
+    const col=d.color||INS_C[i%INS_C.length];
+    return `<div class="donut-legend-item"><div class="donut-swatch" style="background:${col}"></div><span class="donut-code" style="color:${col};min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.label}</span><span class="donut-count">${fmtFull(d.count)}</span><span class="donut-pct">${(d.count/total*100).toFixed(1)}%</span></div>`;
+  }).join('');
+}
+function insHBar(listId, data){
+  const max=Math.max(...data.map(d=>d.count),1);
+  document.getElementById(listId).innerHTML=data.map((d,i)=>{
+    const col=d.color||INS_C[i%INS_C.length];
+    const pct=(d.count/max*100).toFixed(1);
+    return `<div class="ua-row"><div class="ua-label" style="color:${col}" title="${d.label}">${d.label}</div><div class="ua-bar-bg"><div class="ua-bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="ua-pct">${fmtFull(d.count)}</div></div>`;
+  }).join('');
+}
+function insVBar(barsId, labelsId, data){
+  const max=Math.max(...data.map(d=>d.val),1);
+  document.getElementById(barsId).innerHTML=data.map(d=>{
+    const h=Math.round(d.val/max*100);
+    return `<div class="min-bar ${d.cls||'normal'}" style="height:${h}%" title="${d.label} — ${fmtFull(d.val)} (${d.pct})"></div>`;
+  }).join('');
+  if(labelsId) document.getElementById(labelsId).innerHTML=data.map(d=>`<div class="min-x-label">${d.short}</div>`).join('');
+}
+function insModuleBar(listId, data){
+  const max=Math.max(...data.map(d=>d.count),1);
+  document.getElementById(listId).innerHTML=data.map((d,i)=>{
+    const col=d.color||INS_C[(i+4)%INS_C.length];
+    return `<div class="module-row"><div style="min-width:230px"><div class="module-name" style="color:${col}">${d.name}</div><div class="module-desc">${d.desc||''}</div></div><div class="module-bar-bg"><div class="module-bar-fill" style="width:${(d.count/max*100).toFixed(1)}%;background:${col}55;height:6px"></div></div><div class="module-count">${fmtFull(d.count)}</div></div>`;
+  }).join('');
+}
+function insArea(svgId, vals, days){
+  const svg=document.getElementById(svgId); const W=1000,H=180,P={t:16,r:16,b:24,l:46};
+  const iW=W-P.l-P.r, iH=H-P.t-P.b, n=vals.length, max=Math.max(...vals);
+  const xs=i=>P.l+(i/(n-1))*iW, ys=v=>P.t+iH-(v/max)*iH;
+  let h='';
+  for(let k=0;k<=3;k++){const y=P.t+(k/3)*iH; const val=Math.round(max*(1-k/3)/1000);
+    h+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y}" y2="${y}" stroke="#243045" stroke-width="0.5"/>`;
+    h+=`<text x="${P.l-6}" y="${y+4}" text-anchor="end" fill="#5a6a7e" font-size="9" font-family="Courier New">${val}K</text>`;}
+  for(let d=1;d<days;d++){const x=xs(d*24); h+=`<line x1="${x}" x2="${x}" y1="${P.t}" y2="${P.t+iH}" stroke="#2a3a52" stroke-width="1" stroke-dasharray="2 4"/>`;}
+  let area=`M ${xs(0)} ${P.t+iH}`; vals.forEach((v,i)=>area+=` L ${xs(i)} ${ys(v)}`); area+=` L ${xs(n-1)} ${P.t+iH} Z`;
+  h+=`<defs><linearGradient id="owmg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a78bfa" stop-opacity="0.25"/><stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/></linearGradient></defs>`;
+  h+=`<path d="${area}" fill="url(#owmg)"/>`;
+  let line=''; vals.forEach((v,i)=>line+=(i===0?'M':'L')+` ${xs(i)} ${ys(v)}`);
+  h+=`<path d="${line}" fill="none" stroke="#a78bfa" stroke-width="1.3" stroke-linejoin="round"/>`;
+  svg.innerHTML=h;
+}
+function gb(bytes){ return bytes>=1e9 ? (bytes/1e9).toFixed(2)+' GB' : (bytes/1e6).toFixed(1)+' MB'; }
+
+// ── DỮ LIỆU THẬT ──
+const INS_TOTAL = 19975721;
+const insEndpoints = [
+  {label:'/airquality_iqair.php', count:10671508, color:'#4a9eff', avg:6954, reqRaw:10562664},
+  {label:'/airquality_owm.php',   count:6222201,  color:'#a78bfa', avg:555,  reqRaw:6222201},
+  {label:'/airquality.php',       count:2840229,  color:'#34c770', avg:1407, reqRaw:2831060},
+  {label:'OPTIONS * (nội bộ)',    count:240283,   color:'#5a6a7e', avg:126,  reqRaw:240283},
+  {label:'khác',                  count:1500,     color:'#ff7c44', avg:1764, reqRaw:1413},
+];
+const insOwmByHour = [26370,50534,52333,54702,54923,55474,54939,56898,51929,55603,58264,54780,57734,51155,50043,47901,46508,47353,49148,47600,43069,47283,49425,57911,55187,51458,53250,55068,55873,56211,56174,57985,52270,55005,58468,55010,58194,51913,51934,50015,47981,48752,50483,48222,44200,47689,50218,58640,55887,51346,53785,56501,56102,55841,55482,58280,52734,55973,59797,56242,58675,52094,51193,48763,47499,47886,49396,47870,44152,47420,48599,58291,55042,51878,53242,54184,55369,56409,55738,57779,52807,56573,59680,53624,59171,53822,53329,49970,48371,49049,50606,48565,43753,46447,48185,58398,56102,52609,53992,55052,55901,56899,57331,58840,54474,57638,59861,57349,58999,53323,52613,48454,46601,46573,48959,47916,44329,48548,15960];
+const insPlatform = [
+  {label:'Android', count:16847963, color:'#34c770'},
+  {label:'Bot/Server', count:2612791, color:'#ff4d5a'},
+  {label:'Khác', count:371695, color:'#5a6a7e'},
+  {label:'iOS', count:145041, color:'#4a9eff'},
+  {label:'Trình duyệt', count:11732, color:'#f0a830'},
+];
+const insApps = [
+  {label:'okhttp/5.0.0-alpha.4 (Android)', count:16533507, color:'#4a9eff'},
+  {label:'Go-http-client (bot · 1 IP)', count:2609788, color:'#ff4d5a'},
+  {label:'Khác / Unknown', count:256487, color:'#5a6a7e'},
+  {label:'Dalvik (Android WebView)', count:197394, color:'#34c770'},
+  {label:'UA trống', count:130539, color:'#5a6a7e'},
+  {label:'okhttp/4.12.0 (Android cũ)', count:114998, color:'#a78bfa'},
+  {label:'WeatherSwift (iOS)', count:67697, color:'#2dd4bf'},
+  {label:'WeatherLive/proplus (iOS)', count:61083, color:'#f0a830'},
+];
+const insOS = [
+  {label:'iOS 25 (Darwin)', count:50532, color:'#4a9eff'},
+  {label:'Android 16', count:49070, color:'#34c770'},
+  {label:'Android 13', count:36484, color:'#34c770'},
+  {label:'Android 14', count:27169, color:'#34c770'},
+  {label:'Android 12', count:24189, color:'#34c770'},
+  {label:'Android 15', count:22600, color:'#34c770'},
+  {label:'Android 11', count:22500, color:'#34c770'},
+  {label:'iOS 24 (Darwin)', count:16465, color:'#4a9eff'},
+  {label:'Android 10', count:9756, color:'#34c770'},
+  {label:'iOS 22 (Darwin)', count:5190, color:'#4a9eff'},
+];
+const insDevices = [
+  {label:'Xiaomi/Redmi (210812)', count:5579},
+  {label:'Xiaomi/Redmi (220624)', count:5495},
+  {label:'Xiaomi/Redmi (231005)', count:3567},
+  {label:'Xiaomi/Redmi (200720)', count:3405},
+  {label:'Xiaomi/Redmi (240905)', count:3235},
+  {label:'Samsung SM-A155F', count:1939},
+  {label:'Samsung SM-A165F', count:1846},
+  {label:'Samsung SM-A127F', count:1544},
+  {label:'Samsung SM-A166U', count:1497},
+  {label:'Realme RMX3231', count:1426},
+  {label:'Samsung SM-A325F', count:1414},
+];
+const insSizeBuckets = [
+  {short:'<400B', label:'<400B (rỗng/lỗi)', val:1032145, pct:'5,2%', cls:'spike'},
+  {short:'400–2K', label:'400–2.000B', val:7928362, pct:'39,7%', cls:'normal'},
+  {short:'2K–5K', label:'2.000–5.000B', val:2107199, pct:'10,5%', cls:'normal'},
+  {short:'>5K', label:'>5.000B', val:8921516, pct:'44,6%', cls:'tail'},
+];
+const insProto = [
+  {label:'HTTPS (443)', count:15874745, color:'#34c770'},
+  {label:'HTTP (80)', count:4114477, color:'#ff4d5a'},
+];
+const insTopIPs = [
+  {ip:'104.131.114.164', n:2609707, tag:'BOT', t:'attack', net:'DigitalOcean'},
+  {ip:'::1', n:240271, tag:'NỘI BỘ', t:'root', net:'Apache localhost'},
+  {ip:'23.92.26.57', n:106375, tag:'CLOUD', t:'root', net:'Linode · Bắc Mỹ'},
+  {ip:'139.162.23.51', n:18192, tag:'CLOUD', t:'root', net:'Linode · Bắc Mỹ'},
+  {ip:'92.184.103.155', n:13498, tag:'NGƯỜI DÙNG', t:'client', net:'Pháp · RIPE'},
+  {ip:'80.187.113.36', n:11662, tag:'NGƯỜI DÙNG', t:'client', net:'Đức · RIPE'},
+  {ip:'92.184.103.27', n:7083, tag:'NGƯỜI DÙNG', t:'client', net:'Pháp · RIPE'},
+  {ip:'92.184.103.219', n:5644, tag:'NGƯỜI DÙNG', t:'client', net:'Pháp · RIPE'},
+  {ip:'193.151.14.14', n:4840, tag:'NGƯỜI DÙNG', t:'client', net:'RIPE'},
+  {ip:'182.177.121.178', n:4537, tag:'NGƯỜI DÙNG', t:'client', net:'Châu Á · APNIC'},
+  {ip:'92.184.103.116', n:4468, tag:'NGƯỜI DÙNG', t:'client', net:'Pháp · RIPE'},
+  {ip:'80.187.114.4', n:4273, tag:'NGƯỜI DÙNG', t:'client', net:'Đức · RIPE'},
+  {ip:'64.239.27.145', n:3311, tag:'NGƯỜI DÙNG', t:'client', net:'Bắc Mỹ · ARIN'},
+  {ip:'95.65.181.96', n:3027, tag:'NGƯỜI DÙNG', t:'client', net:'RIPE'},
+  {ip:'109.30.130.13', n:3025, tag:'NGƯỜI DÙNG', t:'client', net:'Châu Á · APNIC'},
+];
+const insProbes = [
+  {name:'.env (dò secret/Laravel)', count:1988, desc:'1.957 lượt nhận HTTP 200 (không trả 404)', color:'#ff4d5a'},
+  {name:'backup/archive (.bak/.sql/.zip)', count:282, desc:'282 lượt nhận HTTP 200', color:'#f0a830'},
+  {name:'.git (rò rỉ mã nguồn)', count:246, desc:'244 lượt nhận HTTP 200', color:'#ff4d5a'},
+  {name:'webshell/probe PHP', count:144, desc:'shell/wp-login/xmlrpc/phpinfo… 142 lượt 200', color:'#f0a830'},
+  {name:'server-status (lộ trạng thái)', count:13, desc:'mod_status disclosure', color:'#a78bfa'},
+  {name:'.htpasswd (brute auth)', count:12, desc:'dò file mật khẩu Basic-Auth', color:'#a78bfa'},
+  {name:'metasploit stager', count:4, desc:'payload stager (Metasploit)', color:'#5a6a7e'},
+];
+const insGeo = [
+  {label:'Châu Âu / Trung Đông (RIPE)', count:6491065, color:'#4a9eff'},
+  {label:'Châu Á – TBD (APNIC)', count:4864535, color:'#34c770'},
+  {label:'Châu Phi (AFRINIC)', count:2009576, color:'#f0a830'},
+  {label:'Bắc Mỹ (ARIN)', count:1824469, color:'#a78bfa'},
+  {label:'Mỹ Latinh (LACNIC)', count:1678874, color:'#ff7c44'},
+  {label:'Khác / Chưa rõ', count:270650, color:'#5a6a7e'},
+];
+const insCmp = [
+  {dim:'Endpoint', mar:'iqair 100%', jun:'iqair 53% · owm 31% · airquality 14%'},
+  {dim:'Nền tảng', mar:'Android 99,9%', jun:'Android 84% · Bot 13% · iOS 0,7%'},
+  {dim:'Lượng/ngày', mar:'~2,0 triệu req', jun:'~4,0 triệu req'},
+  {dim:'IP duy nhất', mar:'280K (~21h)', jun:'1,93 triệu (5 ngày)'},
+  {dim:'Băng thông', mar:'1,45 GB', jun:'81,9 GB'},
+  {dim:'okhttp', mar:'chỉ 5.0.0-alpha.4', jun:'5.0.0-alpha.4 + 4.12.0 (vẫn alpha sau ~15 tháng)'},
+];
+
+function initInsights(){
+  // KPI
+  document.getElementById('i-bw').textContent = '81,9 GB';
+  document.getElementById('i-bw-sub').textContent = '~16,4 GB/ngày · ' + fmtFull(81869846370) + ' bytes';
+  document.getElementById('i-ips').textContent = '1,93 triệu';
+  document.getElementById('i-ips-sub').textContent = fmtFull(1934004) + ' IP/thiết bị khác nhau';
+  document.getElementById('i-http').textContent = '20,6%';
+  document.getElementById('i-http-sub').textContent = fmtFull(4114477) + ' / ' + fmtFull(19989222) + ' req qua port 80';
+  document.getElementById('i-bot').textContent = '104.131.114.164';
+  document.getElementById('i-bot-sub').textContent = '2,61 triệu req · 13,1% · DigitalOcean';
+
+  // A — endpoint
+  insDonut('i-ep-donut','i-ep-legend', insEndpoints.map(e=>({label:e.label,count:e.count,color:e.color})), '20,0M', 'request');
+  document.getElementById('i-owm-badge').textContent = 'TB ~51K/giờ';
+  insArea('i-owm-svg', insOwmByHour, 5);
+  document.getElementById('i-ep-tbody').innerHTML = insEndpoints.filter(e=>e.label!=='khác').map(e=>{
+    const cls = e.label.includes('iqair')?'api':e.label.includes('owm')?'attack':'normal';
+    return `<tr><td><span class="ep-path ${cls}" title="${e.label}">${e.label}</span></td><td><span class="ep-count">${fmtFull(e.reqRaw)}</span></td><td><span class="ep-count">${fmtFull(e.avg)} B</span></td><td><span class="ep-count">${gb(e.reqRaw*e.avg)}</span></td></tr>`;
+  }).join('');
+
+  // B — client ecosystem
+  document.getElementById('i-bot-alert').innerHTML = `<div class="alert-bar"><div class="alert-icon">🤖</div><div class="alert-text"><strong>13% toàn bộ traffic đến từ MỘT IP duy nhất</strong> — <code style="font-family:var(--mono);color:var(--accent)">104.131.114.164</code> (DigitalOcean) chạy <code style="font-family:var(--mono);color:var(--accent)">Go-http-client</code> bắn <strong>2,61 triệu request</strong>. Đây là client server-side (crawler/tích hợp), không phải app người dùng. Tab Overview gộp khối này vào "Other/Unknown".</div></div>`;
+  insDonut('i-plat-donut','i-plat-legend', insPlatform, '84%', 'Android');
+  insHBar('i-app-list', insApps);
+  insHBar('i-os-list', insOS);
+  insHBar('i-dev-list', insDevices.map(d=>({label:d.label,count:d.count,color:'#a78bfa'})));
+
+  // C — quality + protocol
+  insVBar('i-size-bars','i-size-labels', insSizeBuckets);
+  document.getElementById('i-size-note').innerHTML = `Khối <code>>5KB</code> (44,6%) là phản hồi iqair đầy đủ. Khối <code><400B</code> (5,2% · ${fmtFull(1032145)} req) là phản hồi rỗng/tối thiểu — phần lớn từ owm.php. Tỷ lệ HTTP 200 toàn hệ thống đạt <strong>99,98%</strong> (chỉ ${fmtFull(3106)} lỗi 4xx/5xx trên 20,0M req).`;
+  insDonut('i-proto-donut','i-proto-legend', insProto, '20,6%', 'HTTP');
+  document.getElementById('i-proto-note').innerHTML = `Hơn <strong>4,1 triệu request</strong> (20,6%) đi qua <code>port 80</code> không mã hóa — bao gồm tham số vị trí/thiết bị dạng nén. Nên ép HTTPS (HSTS / redirect 301) cho toàn bộ client.`;
+
+  // D — top IPs
+  document.getElementById('i-ip-tbody').innerHTML = insTopIPs.map(r=>{
+    const cls = r.t==='attack'?'attack':r.t==='client'?'api':'normal';
+    const tagcls = r.t==='attack'?'threat':r.t==='client'?'api':'root';
+    return `<tr><td><span class="ep-path ${cls}">${r.ip}</span> <span class="ep-tag ${tagcls}">${r.tag}</span> <span style="font-size:10px;color:var(--muted)">${r.net}</span></td><td><span class="ep-count">${fmtFull(r.n)}</span></td></tr>`;
+  }).join('');
+
+  // E — attack surface
+  const probe200 = 1957+282+244+142+2;
+  document.getElementById('i-attack-alert').innerHTML = `<div class="alert-bar"><div class="alert-icon">⚠</div><div class="alert-text"><strong>~${fmtFull(probe200)} lượt dò file nhạy cảm nhận HTTP 200 thay vì 404</strong> (<code style="color:var(--danger)">.env</code>, <code style="color:var(--danger)">.git</code>, backup, webshell). Nhiều khả năng do PHP catch-all bắt mọi đường dẫn — nên trả <strong>404</strong> rõ ràng và chặn các path này để không phát tín hiệu cho scanner.</div></div>`;
+  insModuleBar('i-attack-list', insProbes);
+
+  // F — geo
+  insHBar('i-geo-list', insGeo);
+
+  // G — comparison
+  document.getElementById('i-cmp-tbody').innerHTML = insCmp.map(r=>
+    `<tr><td class="dim">${r.dim}</td><td class="mar">${r.mar}</td><td class="jun">${r.jun}</td></tr>`).join('');
+}
+</script>
+</body>
+</html>
