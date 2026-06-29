@@ -313,8 +313,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
       <strong>Tầng 1 — Amplifier phía client (đã xác nhận trong code):</strong>
       Cả hai app WF3 và WF1 gọi <code>owm.php</code> vô điều kiện ngay cả khi cache <code>iqair.php</code> còn hạn, không có dedup, không có negative-cache, ghi đè field bằng chuỗi rỗng khi fail → vòng lặp dương. Đây là nguồn amplifier chính thổi phồng baseline airapi ở <em>mọi thời điểm</em>.
       <br><br>
-      <strong>Tầng 2 — Spike :00 là thực tế nhưng nguồn chưa định danh:</strong>
-      Log 5 ngày xác nhận spike <strong>2.9×</strong> tại phút <code>:00</code> và spike phụ <strong>1.4×</strong> tại <code>:30–:31</code>. Spike là client-driven (100% Android), nhưng audit mã nguồn WF3 và WF1 xác nhận <em>không có anchor :00 trong 2 app này</em>. Nguồn thật của cú đồng bộ :00 <strong>cần tách log theo app/version để định danh trước khi fix được</strong>.
+      <strong>Tầng 2 — Spike 08/12/20h: ĐÃ XÁC ĐỊNH nguồn — AlarmManager trong app:</strong>
+      Audit mã nguồn WF3 (<code>com.wftab.weather.forecast</code>) và WF1 (<code>com.droidteam.weather</code>) xác nhận nguyên nhân là <strong>AlarmManager exact alarm</strong> của tính năng thông báo Daily + Tomorrow, với giờ mặc định cứng <strong>08:00 / 12:00 / 20:00 giờ VN</strong> và <strong>bật sẵn theo mặc định</strong>. Jitter chỉ 0–58 giây (không có jitter ở phút) → hàng vạn máy dồn trong <strong>~60 giây đầu giờ</strong>. Spike phút <code>:00</code> (2.9×) và spike phụ <code>:30</code> (1.4×) là hệ quả của đặc điểm phân phối tải này.
     </div>
   </div>
   <div class="herd-grid">
@@ -344,7 +344,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
           <div class="ua-list" id="ua-list" style="flex:1;min-width:0"></div>
         </div>
         <div style="margin-top:14px;padding:10px 12px;background:rgba(255,77,90,.06);border:1px solid rgba(255,77,90,.2);border-radius:6px;font-size:11px;line-height:1.6;color:var(--text)">
-          <strong style="color:var(--danger)">~82.6%</strong> traffic đến từ <span style="font-family:var(--mono);color:var(--accent)">okhttp/5.0.0-alpha.4</span> — chứng tỏ đây là app nội bộ. Audit mã nguồn WF3 và WF1 xác nhận không có anchor giây <code style="font-family:var(--mono);color:var(--ok)">:00</code> trong 2 app này.
+          <strong style="color:var(--danger)">~82.6%</strong> traffic đến từ <span style="font-family:var(--mono);color:var(--accent)">okhttp/5.0.0-alpha.4</span> — chứng tỏ đây là app nội bộ. Audit WF3 + WF1 xác nhận nguồn spike 08/12/20h là <strong style="color:var(--ok)">AlarmManager exact alarm</strong> với giờ mặc định cứng. Jitter chỉ 0–58 giây → không có anchor <code style="font-family:var(--mono);color:var(--ok)">:00</code> nhưng có anchor <strong>giờ địa phương</strong>.
         </div>
       </div>
     </div>
@@ -356,7 +356,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
         <div class="cascade">
           <div class="cascade-node root-cause"><div class="cascade-icon">📱</div><div><div class="cascade-label" style="color:var(--warn)">Client Amplifier — owm.php né cache</div><div class="cascade-sub">~16.5M req/5ngày · okhttp/5.0.0-alpha.4 · không dedup, vòng lặp dương</div></div><span class="cascade-tag tag-warn">AMPLIFIER</span></div>
           <div class="cascade-arrow">▼ mỗi read AQI → owm.php bắn song song, không dừng khi fail</div>
-          <div class="cascade-node root-cause" style="border-color:rgba(255,77,90,.35);background:rgba(255,77,90,.06)"><div class="cascade-icon">❓</div><div><div class="cascade-label" style="color:var(--danger)">Nguồn đồng bộ :00 — chưa định danh</div><div class="cascade-sub">Spike 2.9× tại :00 · client-driven (Android) · nhưng WF3+WF1 không có anchor :00 trong code</div></div><span class="cascade-tag tag-err">UNKNOWN SRC</span></div>
+          <div class="cascade-node root-cause" style="border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.06)"><div class="cascade-icon">✅</div><div><div class="cascade-label" style="color:var(--ok)">AlarmManager exact alarm — Daily & Tomorrow notification</div><div class="cascade-sub">Default 08:00/12:00/20:00 VN · bật mặc định · jitter 0–58s → 90K+ máy cùng nổ alarm · xác nhận từ audit WF3 + WF1</div></div><span class="cascade-tag" style="background:rgba(74,222,128,.15);color:var(--ok);border:1px solid rgba(74,222,128,.3)">IDENTIFIED</span></div>
           <div class="cascade-arrow">▼ burst đồng thời + amplifier owm.php cộng hưởng</div>
           <div class="cascade-node impact"><div class="cascade-icon">⚡</div><div><div class="cascade-label" style="color:var(--danger)">airapi.tohapp.com — Thundering Herd</div><div class="cascade-sub">2.9× traffic trong 60s · Apache prefork worker pool cạn · queue backlog</div></div><span class="cascade-tag tag-err">OVERLOAD</span></div>
           <div class="cascade-arrow">▼ worker cạn → request queue đầy</div>
@@ -421,6 +421,65 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   <!-- ============================================================ -->
   <!-- GIẢI PHẪU SPIKE 13:00 — do app Android hay do backend? -->
   <!-- ============================================================ -->
+  <div class="ins-eyebrow" style="margin-top:28px;color:var(--ok)">🔬 Kết quả điều tra WF3 + WF1 — Đã xác định nguồn gốc spike</div>
+  <div class="panel" style="border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.03)">
+    <div class="panel-header">
+      <div class="panel-title">Nguyên nhân gốc rễ: AlarmManager exact alarm — Daily & Tomorrow notification</div>
+      <div class="panel-badge" style="background:rgba(74,222,128,.15);color:var(--ok);border:1px solid rgba(74,222,128,.3)">Độ tin cậy ~95%</div>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="background:var(--s2);border-radius:8px;padding:14px 16px;border:1px solid var(--border)">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;font-weight:600">Cơ chế kích hoạt</div>
+          <div style="font-family:var(--mono);font-size:13px;color:var(--accent);margin-bottom:6px">AlarmManager.setAlarmClock()<br>setExactAndAllowWhileIdle()</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">Alarm chính xác tuyệt đối (RTC_WAKEUP) · tự đánh thức máy · tự re-arm mỗi ngày</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:14px 16px;border:1px solid var(--border)">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;font-weight:600">Giờ mặc định (epoch cứng)</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);color:var(--accent)">08:00 VN</span><span style="font-size:11px;color:var(--muted)">Daily Morning · 01:00 UTC</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);color:var(--accent)">12:00 VN</span><span style="font-size:11px;color:var(--muted)">Daily Afternoon · 05:00 UTC</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);color:var(--warn)">20:00 VN ★</span><span style="font-size:11px;color:var(--muted)">Tomorrow · 13:00 UTC · đỉnh lớn nhất</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="background:var(--s2);border-radius:8px;padding:14px 16px;border:1px solid var(--border);margin-bottom:12px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;font-weight:600">Chuỗi nguyên nhân đầy đủ</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text);line-height:2;overflow-x:auto">
+          App khởi động / boot máy / đổi giờ<br>
+          → BaseApplication.checkAndStartBackgroundFunc()<br>
+          → NotificationCenter.scheduleDailyAlarm() / scheduleTomorrowAlarm()<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;→ setAlarmClock(...) · giờ địa phương + jitter 0–58 giây<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;→ [alarm nổ 08:00 / 12:00 / 20:00] · đánh thức máy (RTC_WAKEUP)<br>
+          → DailyTomorrowNotificationWorker.getAqiData() × N địa điểm<br>
+          → DataManager.getNearestMonitorPointsV2() · type=9 · gzip+base64<br>
+          → GET airquality_iqair.php
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:rgba(255,77,90,.06);border:1px solid rgba(255,77,90,.2);border-radius:8px;padding:14px 16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--danger);margin-bottom:8px;font-weight:600">Tại sao spike lớn?</div>
+          <ul style="font-size:12px;color:var(--text);line-height:1.8;padding-left:16px;margin:0">
+            <li>Giờ mặc định <strong>bật sẵn</strong> cho mọi người dùng mới</li>
+            <li>Hầu hết user Việt Nam không đổi giờ thông báo</li>
+            <li>Jitter chỉ 0–58 <strong>giây</strong> → 90K+ máy dồn trong 1 phút</li>
+            <li>Epoch lưu theo UTC+7 cứng → mọi máy nổ <strong>cùng thời điểm UTC</strong></li>
+          </ul>
+        </div>
+        <div style="background:rgba(108,143,255,.06);border:1px solid rgba(108,143,255,.2);border-radius:8px;padding:14px 16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:8px;font-weight:600">Khuyến nghị sửa</div>
+          <ul style="font-size:12px;color:var(--text);line-height:1.8;padding-left:16px;margin:0">
+            <li><strong>Client #1:</strong> thêm jitter ở <em>phút</em> (±15–30 phút, lưu per-device)</li>
+            <li><strong>Client #2:</strong> đổi sang <code>setWindow()</code> (inexact) thay exact alarm</li>
+            <li><strong>Server:</strong> cache iqair.php theo payload đã giải mã (salt làm URL luôn khác)</li>
+            <li><strong>Amplifier:</strong> gate owm.php + backoff khi server báo chậm</li>
+          </ul>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--muted)">Chi tiết đầy đủ: <a href="report-viewer.html?file=WF3_AIRAPI_SPIKE_INVESTIGATION__2026-06-29.md" style="color:var(--accent)">WF3 · com.wftab.weather.forecast</a> · <a href="report-viewer.html?file=WF1_DieuTra_Spike_iqair_08-12-20h.md" style="color:var(--accent)">WF1 · com.droidteam.weather</a></div>
+    </div>
+  </div>
+
   <div class="ins-eyebrow" style="margin-top:28px">🔬 Giải phẫu spike 13:00 — do app Android hay do backend?</div>
 
   <div class="spk13-verdict">
@@ -433,21 +492,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
         <li>Là <strong>sóng đánh thức đồng bộ</strong> máy đang "ngủ": <code>62%</code> IP cả ngày mới xuất hiện đúng 13:00.</li>
       </ul>
     </div>
-    <div class="spk13-vcard warn">
-      <div class="spk13-vhead">❓ Log KHÔNG chốt được</div>
+    <div class="spk13-vcard ok" style="border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.06)">
+      <div class="spk13-vhead" style="color:var(--ok)">✅ Đã xác định: Lịch ngầm trong app (AlarmManager)</div>
       <ul>
-        <li><strong>Push do backend</strong> hay <strong>lịch chạy ngầm trong app</strong>? Hai nguyên nhân để lại dấu vết log <strong>gần như giống hệt</strong>.</li>
-        <li>Push là tin server→máy, <strong>không nằm trong log API</strong> — chỉ thấy hệ quả (máy gọi API sau đó).</li>
-        <li>Query đã <strong>mã hóa</strong> (<code>param=&lt;base64+gzip&gt;</code>) → không đọc được dấu <code>src=push</code>/campaign.</li>
-        <li>Nhịp theo giây rải đều cả phút (không dồn đúng giây :00) → hợp với <strong>cả hai</strong>: app jitter HOẶC push giao rải.</li>
+        <li>Audit mã nguồn WF3 xác nhận: <strong>AlarmManager exact alarm</strong>, giờ mặc định <strong>08:00 / 12:00 / 20:00 VN</strong>, bật sẵn (<code>isDailyNotifyEnable = true</code>, <code>isTomorrowNotifyEnable = true</code>). <em>Không phải push FCM</em> — handler push chỉ hiển thị notification, không fetch AQI.</li>
+        <li>Jitter = <code>Random().nextInt(59)</code> giây → request rải 0–58 giây trong phút :00. Khớp hoàn toàn với "nhịp rải đều cả 60 giây đầu giờ" quan sát từ log.</li>
+        <li><strong>WF1</strong> (com.droidteam.weather) cùng kết luận: cùng cơ chế AlarmManager, cùng 3 giờ mặc định. Xác nhận vấn đề trên <em>cả hai</em> app.</li>
       </ul>
     </div>
     <div class="spk13-vcard info">
-      <div class="spk13-vhead">🎯 Định hướng</div>
+      <div class="spk13-vhead">🎯 Hành động tiếp theo</div>
       <ul>
-        <li>Việc cần làm <strong>không phụ thuộc</strong> việc phân định: dù push hay lịch app, đây đều là <strong>đánh thức đồng bộ</strong> cả dàn máy.</li>
-        <li>Giảm tải hiệu quả ngay: <strong>cache phía server</strong> cho <code>iqair.php</code> + <strong>rải ngẫu nhiên</strong> thời điểm gọi (jitter) — đúng cho cả hai nguyên nhân.</li>
-        <li>Muốn quy đúng đội (backend hay Android), xem checklist cuối mục.</li>
+        <li><strong>Client (gốc rễ):</strong> thêm jitter ở <em>phút</em> (không chỉ giây) — ví dụ offset ngẫu nhiên ±15–30 phút lưu vào SharedPreferences, dùng lại mỗi ngày. Sửa tại <code>NotificationCenter.scheduleDailyAlarm/scheduleTomorrowAlarm</code>.</li>
+        <li><strong>Server (giảm tải tức thời):</strong> cache <code>iqair.php</code> theo (lat, lon làm tròn) — phải cache từ payload đã giải mã vì salt <code>SecureRandom</code> làm URL luôn khác nhau.</li>
+        <li><strong>Amplifier:</strong> gate đường <code>owm.php</code> bằng TTL + dedup; tắt <code>retryOnConnectionFailure</code> hoặc thêm backoff.</li>
       </ul>
     </div>
   </div>
@@ -504,12 +562,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   </div>
 
   <div class="panel">
-    <div class="panel-header"><div class="panel-title">🔑 Cách chốt dứt khoát "push hay app" (cần dữ liệu ngoài log)</div></div>
+    <div class="panel-header"><div class="panel-title">✅ Kết quả điều tra: Đã xác định "push hay app"</div><div class="panel-badge" style="background:rgba(74,222,128,.15);color:var(--ok);border:1px solid rgba(74,222,128,.3)">Audit WF3 + WF1 hoàn tất</div></div>
     <div class="panel-body">
-      <div class="spk13-step"><div class="spk13-snum">1</div><div class="spk13-stext"><strong>Đối chiếu log gửi push của backend.</strong> Có chiến dịch push/thông báo nào gửi quanh <code>13:00 UTC</code> (≈ 20:00 giờ VN) mỗi ngày không? Nếu khớp mốc → nguyên nhân là <strong>backend (push)</strong>.</div></div>
-      <div class="spk13-step"><div class="spk13-snum">2</div><div class="spk13-stext"><strong>Kiểm lịch chạy ngầm trong app Android.</strong> Xem có <code>WorkManager</code>/<code>AlarmManager</code> hay job đặt lịch gọi <code>iqair.php</code> quanh 13:00 không. Nếu có → nguyên nhân là <strong>app (lịch cứng)</strong>; sửa = thêm jitter (rải giờ ngẫu nhiên).</div></div>
-      <div class="spk13-step"><div class="spk13-snum">3</div><div class="spk13-stext"><strong>Giải mã tham số <code>param</code>.</strong> Query đang là <code>base64+gzip</code>; nếu đội backend giải mã được, đọc trực tiếp tham số sẽ biết request đến từ luồng nào.</div></div>
-      <div class="spk13-step"><div class="spk13-snum">4</div><div class="spk13-stext"><strong>Thêm dấu hiệu đọc-được cho log tương lai.</strong> Gắn <code>?src=push</code> vs <code>?src=schedule</code> hoặc header <code>X-Trigger</code> khi gọi API → các spike sau sẽ <strong>tự giải thích</strong>, không cần suy đoán.</div></div>
+      <div class="spk13-step"><div class="spk13-snum" style="background:rgba(74,222,128,.2);color:var(--ok);border-color:rgba(74,222,128,.4)">✓</div><div class="spk13-stext"><strong>Audit mã nguồn app Android (WF3 + WF1) — HOÀN TẤT.</strong> Xác nhận nguyên nhân là <strong>AlarmManager exact alarm</strong> (không phải push FCM). Handler FCM của WF3 (<code>MyFirebaseMessagingService.kt:167–209</code>) chỉ hiển thị notification, không fetch AQI. WF1 tương tự.</div></div>
+      <div class="spk13-step"><div class="spk13-snum" style="background:rgba(74,222,128,.2);color:var(--ok);border-color:rgba(74,222,128,.4)">✓</div><div class="spk13-stext"><strong>Lịch chạy ngầm trong app — ĐÃ TÌM THẤY.</strong> <code>NotificationCenter.scheduleDailyAlarm()</code> + <code>scheduleTomorrowAlarm()</code> đặt exact alarm tại đúng 08:00/12:00/20:00 VN (mặc định cứng trong <code>PreferencesHelper.kt</code>). Bật sẵn mặc định. Jitter = <code>Random().nextInt(59)</code> giây.</div></div>
+      <div class="spk13-step"><div class="spk13-snum">3</div><div class="spk13-stext"><strong>Giải mã tham số <code>param</code>.</strong> Đã xác nhận: <code>base64 + gzip + salt SecureRandom</code> (<code>EncodeHelper.java</code>). Salt làm URL luôn khác → <strong>server cache phải dựa trên payload đã giải mã</strong>, không cache theo query string.</div></div>
+      <div class="spk13-step"><div class="spk13-snum">4</div><div class="spk13-stext"><strong>Thêm dấu hiệu đọc-được cho log tương lai.</strong> Gắn <code>?src=schedule</code> hoặc header <code>X-Trigger: alarm</code> trong <code>DailyTomorrowNotificationWorker</code> → log sau tự giải thích nguồn gọi.</div></div>
     </div>
   </div>
 
